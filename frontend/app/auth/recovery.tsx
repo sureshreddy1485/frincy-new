@@ -6,12 +6,13 @@ import * as Clipboard from 'expo-clipboard';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { CustomAlert } from '../../src/providers/AlertProvider';
-
+import { useAuthStore } from '../../src/store/authStore';
 
 export default function RecoveryCodeScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { recoveryCode } = useLocalSearchParams<{ recoveryCode: string }>();
+  const { recoveryCode, userString, accessToken, refreshToken } = useLocalSearchParams<{ recoveryCode: string, userString?: string, accessToken?: string, refreshToken?: string }>();
+  const { setAuth } = useAuthStore();
   const [understood, setUnderstood] = useState(false);
 
   const handleCopy = async () => {
@@ -36,6 +37,20 @@ export default function RecoveryCodeScreen() {
       await Print.printAsync({ html });
     } catch (e) {
       CustomAlert.alert('Error', 'Failed to generate PDF');
+    }
+  };
+
+  const handleContinue = async () => {
+    if (userString && accessToken && refreshToken) {
+      try {
+        const user = JSON.parse(userString);
+        await setAuth(user, accessToken, refreshToken, true);
+        router.replace('/(tabs)');
+      } catch (e) {
+        router.replace('/auth/login');
+      }
+    } else {
+      router.replace('/auth/login');
     }
   };
 
@@ -71,10 +86,10 @@ export default function RecoveryCodeScreen() {
       <Button 
         mode="contained" 
         disabled={!understood} 
-        onPress={() => router.replace('/auth/login')}
+        onPress={handleContinue}
         style={styles.continueBtn}
       >
-        Continue to Login
+        Continue to App
       </Button>
     </View>
   );

@@ -41,12 +41,17 @@ export default function RegisterScreen() {
         confirmPassword
       });
       
-      const { recoveryCode } = response.data.data;
+      const { user, accessToken, refreshToken, recoveryCode } = response.data.data;
       
       // Navigate to Recovery Code screen
       router.replace({
         pathname: '/auth/recovery',
-        params: { recoveryCode }
+        params: { 
+          recoveryCode, 
+          userString: JSON.stringify(user), 
+          accessToken, 
+          refreshToken 
+        }
       });
     } catch (error: any) {
       showError('Registration Failed', error.response?.data?.message || 'Unknown error');

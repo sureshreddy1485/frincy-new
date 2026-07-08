@@ -2,9 +2,9 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import Constants from 'expo-constants';
 
-// Dynamically resolve local IP for physical devices running Expo
+// Use Render URL for backend, or fallback to local if needed
 const host = Constants.expoConfig?.hostUri?.split(':')[0] || '10.0.2.2';
-const API_URL = `http://${host}:3000/api/v1`;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://frincy-new.onrender.com/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_URL,

@@ -50,7 +50,7 @@ export default function LoginScreen() {
       router.replace('/(tabs)');
     } catch (error: any) {
       const msg = error.response?.data?.message;
-      showError('Login Failed', msg === 'Unauthorized' || error.response?.status === 401 || !msg ? 'Invalid credentials. Please check your email and password.' : msg);
+      showError('Login Failed', msg || 'An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -28,7 +28,13 @@ export class AuthService {
 
     await this.repository.createAuditLog(user.id, 'REGISTER', undefined, 'User registered account');
 
+    const accessToken = generateAccessToken(user.id);
+    const refreshToken = generateRefreshToken(user.id, true); // default to true for rememberMe on register
+    await this.repository.storeRefreshToken(user.id, refreshToken, 30);
+
     return {
+      accessToken,
+      refreshToken,
       user: { id: user.id, email: user.email, name: user.name },
       recoveryCode, // Sent ONLY ONCE
     };
@@ -37,13 +43,13 @@ export class AuthService {
   async login(data: any, ipAddress?: string, userAgent?: string) {
     const user = await this.repository.findUserByEmail(data.email);
     if (!user || !user.passwordHash) {
-      throw Object.assign(new Error('Invalid credentials'), { statusCode: 401 });
+      throw Object.assign(new Error('No account found. Create an account.'), { statusCode: 404 });
     }
 
     const isValid = await compareData(data.password, user.passwordHash);
     if (!isValid) {
       await this.repository.createAuditLog(user.id, 'FAILED_LOGIN', ipAddress, 'Failed login attempt');
-      throw Object.assign(new Error('Invalid credentials'), { statusCode: 401 });
+      throw Object.assign(new Error('Incorrect email or phone and password combo.'), { statusCode: 401 });
     }
 
     const accessToken = generateAccessToken(user.id);
