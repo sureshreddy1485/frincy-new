@@ -1,0 +1,487 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------
+// ENUMS
+// -----------------------------------------
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+  VIEWER
+}
+
+enum TransactionType {
+  GAVE
+  GOT
+  INCOME
+  EXPENSE
+}
+
+enum ReminderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+// -----------------------------------------
+// MODELS
+// -----------------------------------------
+
+model User {
+  id               String  @id @default(uuid())
+  email            String  @unique
+  phone            String? @unique
+  passwordHash     String?
+  recoveryCodeHash String?
+  name             String?
+  avatarUrl        String?
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  // Relations
+  memberships   BusinessMember[]
+  folderMembers FolderMember[]
+  sessions      DeviceSession[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  userSettings  UserSettings?
+  auditLogs     AuditLog[]
+}
+
+model UserSettings {
+  id       String  @id @default(uuid())
+  userId   String  @unique
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  darkMode Boolean @default(false)
+  language String  @default("en")
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+}
+
+model Business {
+  id       String  @id @default(uuid())
+  name     String
+  currency String  @default("INR")
+  logoUrl  String?
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  // Relations
+  members      BusinessMember[]
+  customers    Customer[]
+  customerGrps CustomerGroup[]
+  ledgers      Ledger[]
+  categories   Category[]
+  tags         Tag[]
+  activityLogs ActivityLog[]
+  editHistory  EditHistory[]
+  reminders    Reminder[]
+  settings     BusinessSettings?
+}
+
+model BusinessSettings {
+  id         String   @id @default(uuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  timezone   String   @default("Asia/Kolkata")
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+}
+
+model BusinessMember {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  role       Role     @default(VIEWER)
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+}
+
+model CustomerGroup {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  customers Customer[]
+  folderMembers FolderMember[]
+  folderInvites FolderInvite[]
+
+  @@index([businessId])
+}
+
+model Customer {
+  id         String         @id @default(uuid())
+  businessId String
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  groupId    String?
+  group      CustomerGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  balance    Float          @default(0.0) // Denormalized for fast reads
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  ledgers Ledger[]
+
+  @@index([businessId])
+  @@index([groupId])
+}
+
+model Ledger {
+  id         String    @id @default(uuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name       String
+  type       String    @default("GENERAL") // GENERAL, CUSTOMER, SUPPLIER
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  transactions Transaction[]
+
+  @@index([businessId])
+  @@index([customerId])
+}
+
+model Category {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  type       String // INCOME or EXPENSE
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  transactions Transaction[]
+
+  @@index([businessId])
+}
+
+model Tag {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  color      String?
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  transactions TransactionTag[]
+
+  @@index([businessId])
+}
+
+model Transaction {
+  id         String          @id @default(uuid())
+  ledgerId   String
+  ledger     Ledger          @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  amount     Float
+  type       TransactionType
+  date       DateTime
+  note       String?
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  attachments Attachment[]
+  tags        TransactionTag[]
+
+  @@index([ledgerId])
+  @@index([categoryId])
+  @@index([date])
+}
+
+model TransactionTag {
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tagId         String
+  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  // For offline sync of M2M, WatermelonDB needs an ID. 
+  // We should add a unique ID for the join table or composite keys. 
+  // Prisma handles @@id but WatermelonDB expects standard 'id'.
+  id String @id @default(uuid())
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@unique([transactionId, tagId])
+  @@index([transactionId])
+  @@index([tagId])
+}
+
+model Attachment {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  fileUrl       String
+  fileType      String
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@index([transactionId])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@index([businessId])
+  @@index([userId])
+}
+
+model Reminder {
+  id         String         @id @default(uuid())
+  businessId String
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  title      String
+  dueDate    DateTime
+  status     ReminderStatus @default(PENDING)
+  relatedId  String?
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@index([businessId])
+}
+
+model Notification {
+  id     String  @id @default(uuid())
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  String
+  body   String
+  isRead Boolean @default(false)
+
+  // Sync
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  version   Int       @default(1)
+
+  @@index([userId])
+}
+
+model FolderMember {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId    String
+  group      CustomerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  role       Role     @default(VIEWER)
+
+  // Sync
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  version    Int      @default(1)
+
+  permissions FolderPermission?
+
+  @@unique([userId, groupId])
+  @@index([groupId])
+}
+
+model FolderPermission {
+  id                     String   @id @default(uuid())
+  memberId               String   @unique
+  member                 FolderMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  canView                Boolean  @default(true)
+  canCreateCustomer      Boolean  @default(false)
+  canEditCustomer        Boolean  @default(false)
+  canDeleteCustomer      Boolean  @default(false)
+  canCreateTransaction   Boolean  @default(false)
+  canEditTransaction     Boolean  @default(false)
+  canDeleteTransaction   Boolean  @default(false)
+  canExport              Boolean  @default(false)
+  canManageMembers       Boolean  @default(false)
+
+  // Sync
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  deletedAt              DateTime?
+  version                Int      @default(1)
+}
+
+model FolderInvite {
+  id         String   @id @default(uuid())
+  groupId    String
+  group      CustomerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  status     String   @default("ACTIVE") // ACTIVE, USED, EXPIRED
+  usageCount Int      @default(0)
+  maxUses    Int      @default(1)
+  expiresAt  DateTime?
+
+  // Sync
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  version    Int      @default(1)
+
+  @@index([groupId])
+  @@index([token])
+}
+
+model EditHistory {
+  id             String   @id @default(uuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId         String
+  userRole       String
+  recordType     String
+  recordId       String
+  previousValue  Json
+  newValue       Json
+  
+  // Sync
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+  version        Int      @default(1)
+
+  @@index([businessId])
+  @@index([recordId])
+}
+
+// -----------------------------------------
+// SYSTEM MODELS
+// -----------------------------------------
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model DeviceSession {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId     String?  @unique
+  deviceName   String?
+  platform     String?
+  ipAddress    String?
+  userAgent    String?
+  lastActiveAt DateTime @default(now())
+  pushToken    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model SyncMetadata {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  lastPulledAt DateTime?
+  lastPushedAt DateTime?
+}
+
+model AuditLog {
+  id        String  @id @default(uuid())
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  details   String?
+  ipAddress String?
+  level     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
