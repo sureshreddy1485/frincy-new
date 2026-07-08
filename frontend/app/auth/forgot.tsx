@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TextInput, Button, Text, useTheme, Portal, Dialog } from 'react-native-paper';
+import { TextInput, Button, Text, useTheme, Portal, Dialog, HelperText } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { apiClient } from '../../src/api/client';
 
@@ -16,6 +16,7 @@ export default function ForgotPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
 
   // Dialog State
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -84,9 +85,15 @@ export default function ForgotPasswordScreen() {
         secureTextEntry={!showPassword}
         mode="flat"
         theme={{ colors: { background: theme.colors.background, surface: theme.colors.background } }}
+        left={<TextInput.Icon icon="information-outline" onPress={() => setShowPasswordRules(!showPasswordRules)} />}
         right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
-        style={[styles.input, { backgroundColor: 'transparent' }]}
+        style={[styles.input, { backgroundColor: 'transparent', marginBottom: showPasswordRules ? 0 : 16 }]}
       />
+      {showPasswordRules && (
+        <HelperText type="info" visible={showPasswordRules} style={{ marginBottom: 16 }}>
+          Min 8 characters, 1 capital, 1 number, 1 special character.
+        </HelperText>
+      )}
 
       <TextInput
         label="Confirm New Password"
