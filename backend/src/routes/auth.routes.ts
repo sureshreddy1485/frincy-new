@@ -5,6 +5,7 @@ import {
   forgotPassword, 
   changePassword, 
   generateNewRecoveryCode,
+  getRecoveryCodeStatus,
   getActiveSessions,
   logoutDevice,
   logoutAllDevices
@@ -31,6 +32,7 @@ router.use(authenticate);
 
 router.post('/change-password', validate(changePasswordSchema), changePassword);
 router.post('/recovery-code', validate(generateRecoveryCodeSchema), generateNewRecoveryCode);
+router.get('/recovery-code/status', getRecoveryCodeStatus);
 router.get('/sessions', getActiveSessions);
 router.delete('/sessions/:sessionId', logoutDevice);
 router.delete('/sessions', logoutAllDevices);

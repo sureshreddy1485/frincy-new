@@ -425,11 +425,19 @@ export class SyncRepository {
         return record;
       };
 
-      // ── Step 1: Apply businesses first (no ownership check needed — user is creating their own) ──
-      await apply(tx.business, changes.businesses, (r) => r.id);
+      // ── Step 1: Apply businesses — NO ownership check (user creates their own business) ──
+      await apply(tx.business, changes.businesses, undefined);
 
       // ── Step 2: Apply business members ──────────────────────────────────────
-      await apply(tx.businessMember, changes.business_members, biz, resolveMemberUser);
+      // Allow if: the user is a member of the business (existing) OR the record is for themselves
+      // This handles the bootstrapping case where an owner syncs their own membership for a new business
+      const bizWithSelfOverride = (record: any) => {
+        const recordBizId = record.businessId;
+        // If the member record is for the authenticated user, always allow (they're setting themselves up)
+        if (record.userId === userId) return undefined; // undefined = no check = allow
+        return recordBizId; // For OTHER users' memberships, enforce ownership
+      };
+      await apply(tx.businessMember, changes.business_members, bizWithSelfOverride, resolveMemberUser);
 
       // ── Step 3: REFRESH businessIds — now includes any just-created memberships ──
       const freshMemberships = await tx.businessMember.findMany({

@@ -18,6 +18,7 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [recoveryPromptVisible, setRecoveryPromptVisible] = useState(false);
   
   // Dialog State
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -50,9 +51,14 @@ export default function LoginScreen() {
         }
       });
       
-      const { user, accessToken, refreshToken } = response.data.data;
+      const { user, accessToken, refreshToken, hasRecoveryCode } = response.data.data;
       await setAuth(user, accessToken, refreshToken, rememberMe);
-      router.replace('/(tabs)');
+      if (hasRecoveryCode === false) {
+        // Old user – prompt them to set up a recovery code before entering the app
+        setRecoveryPromptVisible(true);
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       const msg = error.response?.data?.message;
       showError('Login Failed', msg || 'An error occurred during login. Please try again.');
@@ -122,6 +128,28 @@ export default function LoginScreen() {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setDialogVisible(false)}>OK</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={recoveryPromptVisible} dismissable={false}>
+          <Dialog.Icon icon="shield-alert" />
+          <Dialog.Title>Set Up Recovery Code</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
+              Your account does not have a recovery code yet.
+            </Text>
+            <Text variant="bodySmall" style={{ opacity: 0.7 }}>
+              A recovery code is the only way to reset your password if you forget it. 
+              We strongly recommend setting one up now. It only takes a few seconds.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => { setRecoveryPromptVisible(false); router.replace('/(tabs)'); }}>
+              Skip for Now
+            </Button>
+            <Button mode="contained" onPress={() => { setRecoveryPromptVisible(false); router.replace('/(tabs)'); setTimeout(() => router.push('/settings/security'), 300); }}>
+              Set Up Now
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

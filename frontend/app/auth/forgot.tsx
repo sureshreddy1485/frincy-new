@@ -44,8 +44,22 @@ export default function ForgotPasswordScreen() {
       
       showError('Success', 'Password reset successfully. Please login with your new password.');
     } catch (error: any) {
-      // Intentionally generic per rules
-      showError('Error', 'Invalid credentials.');
+      const status = error.response?.status;
+      const message = error.response?.data?.message;
+      if (status === 422 && message === 'NO_RECOVERY_CODE') {
+        showError(
+          'No Recovery Code Set Up',
+          'This account was created before the recovery code feature was added.\n\n' +
+          'If you still remember your password:\n' +
+          '1. Log in normally\n' +
+          '2. Go to Settings → Security\n' +
+          '3. Tap "Generate Recovery Code"\n\n' +
+          'If you have completely lost access, please contact support.'
+        );
+      } else {
+        // Intentionally generic per security rules
+        showError('Error', 'Invalid credentials.');
+      }
     } finally {
       setLoading(false);
     }

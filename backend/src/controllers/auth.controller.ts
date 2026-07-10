@@ -47,6 +47,12 @@ export const generateNewRecoveryCode = asyncHandler(async (req: Request, res: Re
   res.status(200).json({ success: true, data: result });
 });
 
+export const getRecoveryCodeStatus = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!.id;
+  const user = await authService.getUserById(userId);
+  res.status(200).json({ success: true, data: { hasRecoveryCode: !!user?.recoveryCodeHash } });
+});
+
 export const getActiveSessions = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const sessions = await authService.getActiveSessions(userId);

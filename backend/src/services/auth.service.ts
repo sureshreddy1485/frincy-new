@@ -70,14 +70,24 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name }
+      user: { id: user.id, email: user.email, name: user.name },
+      hasRecoveryCode: !!user.recoveryCodeHash,
     };
   }
 
   async forgotPassword(data: any, ipAddress?: string) {
     const user = await this.repository.findUserByEmail(data.email);
-    if (!user || !user.recoveryCodeHash) {
+    if (!user) {
       throw Object.assign(new Error('Invalid credentials'), { statusCode: 400 });
+    }
+
+    // Old users created before the recovery code feature will have no hash.
+    // Give them a specific error code so the frontend can guide them.
+    if (!user.recoveryCodeHash) {
+      throw Object.assign(
+        new Error('NO_RECOVERY_CODE'),
+        { statusCode: 422 }
+      );
     }
 
     const isValid = await compareData(data.recoveryCode, user.recoveryCodeHash);
@@ -115,6 +125,10 @@ export class AuthService {
     await this.repository.createAuditLog(userId, 'CHANGE_PASSWORD', ipAddress);
 
     return { success: true };
+  }
+
+  async getUserById(userId: string) {
+    return this.repository.findUserById(userId);
   }
 
   async generateNewRecoveryCode(userId: string, data: any, ipAddress?: string) {
