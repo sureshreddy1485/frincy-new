@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput as RNTextInput, Keyboard } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput as RNTextInput, Keyboard, RefreshControl } from 'react-native';
 import { Appbar, List, Switch, useTheme, Divider, Avatar, Text, Surface, IconButton, Dialog, Portal, TextInput, Button, Searchbar } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAppStore } from '../../src/store';
@@ -14,6 +14,7 @@ import { CustomAlert } from '../../src/providers/AlertProvider';
 import { invitationRepository } from '../../src/repository/invitation.repository';
 import { businessMemberService } from '../../src/services/businessMembers.service';
 import { Invitation } from '../../src/database/models';
+import { SyncService } from '../../src/sync/sync.service';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -24,6 +25,7 @@ export default function SettingsScreen() {
   const { businessesList, activeBusinessId, activeBusinessRole, setActiveBusiness } = useBusinessStore();
 
   const [pendingInvitations, setPendingInvitations] = useState<Invitation[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -35,6 +37,21 @@ export default function SettingsScreen() {
       }
     }, [user])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await SyncService.runSync({ forceFullSync: true });
+      if (user) {
+        const invites = await invitationRepository.getPendingForUser(user.email ?? null, user.phone ?? null);
+        setPendingInvitations(invites);
+      }
+    } catch (error) {
+      console.error('Failed to refresh settings data', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user]);
 
   const handleAcceptInvite = async (invitation: Invitation) => {
     if (!user) return;
@@ -137,7 +154,12 @@ export default function SettingsScreen() {
         )}
       </Appbar.Header>
 
-      <ScrollView>
+      <ScrollView 
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
+        }
+      >
 
         {/* ── Profile List Item ─────────────────────────────────────────────── */}
         {user && (
