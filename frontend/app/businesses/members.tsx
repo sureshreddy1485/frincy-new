@@ -13,7 +13,7 @@ export default function BusinessMembersScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { activeBusinessId } = useBusinessStore();
+  const { activeBusinessId, activeBusinessRole } = useBusinessStore();
   const { user } = useAuthStore();
   const targetBusinessId = id || activeBusinessId;
 
@@ -57,6 +57,9 @@ export default function BusinessMembersScreen() {
       setInviteContact('');
       setInviteRole('STAFF');
       loadData();
+      
+      const SyncService = require('../../src/sync/sync.service').SyncService;
+      SyncService.runSync().catch(console.error);
     } catch (e: any) {
       console.error(e);
       CustomAlert.alert('Error', e.message || 'Failed to grant access');
@@ -90,7 +93,9 @@ export default function BusinessMembersScreen() {
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Members & Roles" />
-        <Appbar.Action icon="account-plus" onPress={() => setInviteOpen(true)} />
+        {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+          <Appbar.Action icon="account-plus" onPress={() => setInviteOpen(true)} />
+        )}
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -98,9 +103,11 @@ export default function BusinessMembersScreen() {
         <Surface style={styles.surface} elevation={1}>
           {members.map((m, i) => {
             const isMe = m.userId === user?.id;
+            const isUUID = m.userId.length === 36 && m.userId.includes('-');
+            const fallbackName = isUUID ? 'Team Member' : m.userId;
             const displayName = isMe 
-              ? (user?.name || user?.email || user?.phone)
-              : ((m as any).user?.name || (m as any).user?.email || (m as any).user?.phone || m.userId);
+              ? (user?.name || user?.email || user?.phone || fallbackName)
+              : ((m as any).user?.name || (m as any).user?.email || (m as any).user?.phone || fallbackName);
             
             return (
               <List.Item
@@ -110,8 +117,12 @@ export default function BusinessMembersScreen() {
                 left={props => <List.Icon {...props} icon="account" />}
                 right={props => (
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <IconButton {...props} icon="pencil" size={20} onPress={() => {}} />
-                    <IconButton {...props} icon="delete" size={20} iconColor={theme.colors.error} onPress={() => handleRemoveMember(m.id)} />
+                    {activeBusinessRole === 'OWNER' && (
+                      <>
+                        <IconButton {...props} icon="pencil" size={20} onPress={() => {}} />
+                        <IconButton {...props} icon="delete" size={20} iconColor={theme.colors.error} onPress={() => handleRemoveMember(m.id)} />
+                      </>
+                    )}
                   </View>
                 )}
                 style={i < members.length - 1 ? styles.divider : undefined}
@@ -120,6 +131,30 @@ export default function BusinessMembersScreen() {
           })}
           {members.length === 0 && <List.Item title="No members added yet" />}
         </Surface>
+
+        {invitations.length > 0 && (
+          <>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Pending Invitations ({invitations.length})</Text>
+            <Surface style={styles.surface} elevation={1}>
+              {invitations.map((inv, i) => (
+                <List.Item
+                  key={inv.id}
+                  title={inv.email || inv.phone || 'Unknown'}
+                  description={`Role: ${inv.role}`}
+                  left={props => <List.Icon {...props} icon="email-outline" />}
+                  right={props => (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      {activeBusinessRole === 'OWNER' && (
+                        <IconButton {...props} icon="delete" size={20} iconColor={theme.colors.error} onPress={() => handleRevoke(inv.id)} />
+                      )}
+                    </View>
+                  )}
+                  style={i < invitations.length - 1 ? styles.divider : undefined}
+                />
+              ))}
+            </Surface>
+          </>
+        )}
       </ScrollView>
 
       <Portal>
@@ -127,14 +162,14 @@ export default function BusinessMembersScreen() {
           <Dialog.Title>Grant Access</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium" style={{ marginBottom: 16, color: theme.colors.onSurfaceVariant }}>
-              Enter the registered email or phone number of the user. They will instantly be granted access to this business when online.
+              Enter the email or phone number of the user to send an invitation. They can accept it from their settings.
             </Text>
             <TextInput
               label="Email or Phone Number"
-              mode="outlined"
+              mode="flat"
               value={inviteContact}
               onChangeText={setInviteContact}
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: 16, backgroundColor: 'transparent' }}
             />
             <Text variant="labelLarge" style={{ marginBottom: 8 }}>Role</Text>
             <SegmentedButtons

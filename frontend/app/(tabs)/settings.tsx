@@ -11,7 +11,9 @@ import { customers, ledgers, products, invoices } from '../../src/database/schem
 import { eq, sql } from 'drizzle-orm';
 import * as ImagePicker from 'expo-image-picker';
 import { CustomAlert } from '../../src/providers/AlertProvider';
-
+import { invitationRepository } from '../../src/repository/invitation.repository';
+import { businessMemberService } from '../../src/services/businessMembers.service';
+import { Invitation } from '../../src/database/models';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -20,6 +22,50 @@ export default function SettingsScreen() {
   const { user, logout } = useAuthStore();
   const { status: syncStatus, lastSyncedAt } = useSyncStore();
   const { businessesList, activeBusinessId, activeBusinessRole, setActiveBusiness } = useBusinessStore();
+
+  const [pendingInvitations, setPendingInvitations] = useState<Invitation[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      useBusinessStore.getState().refreshRole();
+      if (user) {
+        invitationRepository.getPendingForUser(user.email ?? null, user.phone ?? null)
+          .then(setPendingInvitations)
+          .catch(console.error);
+      }
+    }, [user])
+  );
+
+  const handleAcceptInvite = async (invitation: Invitation) => {
+    if (!user) return;
+    try {
+      await businessMemberService.acceptInvitation(invitation, user.id);
+      setPendingInvitations(prev => prev.filter(i => i.id !== invitation.id));
+      
+      CustomAlert.alert('Success', 'Invitation accepted! Syncing business data...');
+      
+      // Push the acceptance to the server and pull the new business data
+      const SyncService = require('../../src/sync/sync.service').SyncService;
+      await SyncService.runSync({ forceFullSync: true });
+      
+      await useBusinessStore.getState().loadBusinesses(user.id);
+    } catch (e: any) {
+      CustomAlert.alert('Error', e.message || 'Failed to accept invitation');
+    }
+  };
+
+  const handleDeclineInvite = async (invitation: Invitation) => {
+    try {
+      await businessMemberService.declineInvitation(invitation.id);
+      setPendingInvitations(prev => prev.filter(i => i.id !== invitation.id));
+      CustomAlert.alert('Success', 'Invitation declined.');
+      
+      const SyncService = require('../../src/sync/sync.service').SyncService;
+      SyncService.runSync().catch(console.error); // Run in background
+    } catch (e: any) {
+      CustomAlert.alert('Error', e.message || 'Failed to decline invitation');
+    }
+  };
 
   const [isSwitcherVisible, setSwitcherVisible] = useState(false);
   const [themeDialogVisible, setThemeDialogVisible] = useState(false);
@@ -125,6 +171,30 @@ export default function SettingsScreen() {
             right={(p) => <Button onPress={() => setSwitcherVisible(true)}>Switch</Button>}
             style={{ paddingVertical: 12 }}
           />
+        )}
+
+        {/* ── Pending Invitations ─────────────────────────────────────────────── */}
+        {pendingInvitations.length > 0 && (
+          <>
+            <Divider />
+            <List.Section>
+              <List.Subheader>Pending Invitations</List.Subheader>
+              {pendingInvitations.map(inv => (
+                <List.Item
+                  key={inv.id}
+                  title="Business Invitation"
+                  description={`Role: ${inv.role}`}
+                  left={p => <List.Icon {...p} icon="email-receive" color={theme.colors.primary} />}
+                  right={p => (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <IconButton {...p} icon="check" iconColor={theme.colors.primary} onPress={() => handleAcceptInvite(inv)} />
+                      <IconButton {...p} icon="close" iconColor={theme.colors.error} onPress={() => handleDeclineInvite(inv)} />
+                    </View>
+                  )}
+                />
+              ))}
+            </List.Section>
+          </>
         )}
 
         <Divider />

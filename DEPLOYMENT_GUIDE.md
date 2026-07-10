@@ -71,6 +71,7 @@ Navigate into your frontend directory and initialize the EAS configuration:
 ```powershell
 cd frontend
 eas build:configure
+eas build -p android --profile preview
 ```
 *(When prompted to select platforms, choose `All` or `Android`).*
 

@@ -24,6 +24,11 @@ export default function LoginScreen() {
   const [dialogMessage, setDialogMessage] = useState('');
   const [dialogTitle, setDialogTitle] = useState('');
 
+  const togglePassword = React.useCallback(() => setShowPassword(p => !p), []);
+  const passwordIcon = React.useMemo(() => (
+    <TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={togglePassword} />
+  ), [showPassword, togglePassword]);
+
   const showError = (title: string, message: string) => {
     setDialogTitle(title);
     setDialogMessage(message);
@@ -81,7 +86,7 @@ export default function LoginScreen() {
         secureTextEntry={!showPassword}
         mode="flat"
         theme={{ colors: { background: theme.colors.background, surface: theme.colors.background } }}
-        right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
+        right={passwordIcon}
         style={[styles.input, { backgroundColor: 'transparent' }]}
       />
 

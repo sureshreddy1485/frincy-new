@@ -19,13 +19,14 @@ export default function FolderDetailsScreen() {
   const { id } = useLocalSearchParams();
   const theme = useTheme();
   const router = useRouter();
-  const { activeBusinessId } = useBusinessStore();
+  const { activeBusinessId, activeBusinessRole } = useBusinessStore();
 
   const [group, setGroup] = useState<CustomerGroup | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [menuVisible, setMenuVisible] = useState(false);
   const [editDialogVisible, setEditDialogVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,39 +93,98 @@ export default function FolderDetailsScreen() {
     ]);
   };
 
+  const toggleSelection = (customerId: string) => {
+    setSelectedCustomers(prev => 
+      prev.includes(customerId) ? prev.filter(id => id !== customerId) : [...prev, customerId]
+    );
+  };
+
+  const handleCustomerPress = (customerId: string) => {
+    if (selectedCustomers.length > 0) {
+      toggleSelection(customerId);
+    } else {
+      router.push(`/customers/${customerId}`);
+    }
+  };
+
+  const handleCustomerLongPress = (customerId: string) => {
+    if (activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') {
+      toggleSelection(customerId);
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    CustomAlert.alert('Delete Customers', `Are you sure you want to delete ${selectedCustomers.length} customers?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Delete', 
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await Promise.all(selectedCustomers.map(id => customerService.deleteCustomer(activeBusinessId, id)));
+            setCustomers(prev => prev.filter(c => !selectedCustomers.includes(c.id)));
+            setSelectedCustomers([]);
+          } catch (e: any) {
+            CustomAlert.alert('Error', e.message || 'Failed to delete customers');
+          }
+        }
+      }
+    ]);
+  };
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-          <Appbar.BackAction onPress={() => router.back()} />
-          <Appbar.Content title={group ? group.name : 'Folder'} />
-          {id !== 'uncategorized' && (
-            <Menu
-              visible={menuVisible}
-              onDismiss={() => setMenuVisible(false)}
-              anchor={<Appbar.Action icon="dots-vertical" onPress={() => setMenuVisible(true)} />}
-            >
-              <Menu.Item 
-                leadingIcon="pencil" 
-                onPress={() => { 
-                  setMenuVisible(false); 
-                  setRenameValue(group?.name || '');
-                  setEditDialogVisible(true);
-                }} 
-                title="Edit Folder Name" 
-              />
-              <Menu.Item 
-                leadingIcon="delete" 
-                onPress={() => { 
-                  setMenuVisible(false); 
-                  handleDelete();
-                }} 
-                title="Delete Folder" 
-              />
-            </Menu>
-          )}
-        </Appbar.Header>
+        {selectedCustomers.length > 0 ? (
+          <Appbar.Header style={{ backgroundColor: theme.colors.primaryContainer }}>
+            <Appbar.Action icon="close" iconColor={theme.colors.onPrimaryContainer} onPress={() => setSelectedCustomers([])} />
+            <Appbar.Content title={`${selectedCustomers.length} selected`} titleStyle={{ color: theme.colors.onPrimaryContainer }} />
+            <Appbar.Action icon="delete" iconColor={theme.colors.onPrimaryContainer} onPress={handleDeleteSelected} />
+          </Appbar.Header>
+        ) : (
+          <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
+            <Appbar.BackAction onPress={() => router.back()} />
+            <Appbar.Content title={group ? group.name : 'Folder'} subtitle={group?.updatedBy ? `Updated by ${group.updatedBy}` : undefined} />
+            {id !== 'uncategorized' && (
+              <Menu
+                visible={menuVisible}
+                onDismiss={() => setMenuVisible(false)}
+                anchor={<Appbar.Action icon="dots-vertical" onPress={() => setMenuVisible(true)} />}
+              >
+                <Menu.Item 
+                  leadingIcon="pencil" 
+                  onPress={() => { 
+                    setMenuVisible(false); 
+                    setRenameValue(group?.name || '');
+                    setEditDialogVisible(true);
+                  }} 
+                  title="Edit Folder Name" 
+                />
+                {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+                  <Menu.Item 
+                    leadingIcon="account-group" 
+                    onPress={() => { 
+                      setMenuVisible(false); 
+                      router.push(`/folders/${id}/members`);
+                    }} 
+                    title="Folder Members" 
+                  />
+                )}
+                {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+                  <Menu.Item 
+                    leadingIcon="delete" 
+                    onPress={() => { 
+                      setMenuVisible(false); 
+                      handleDelete();
+                    }} 
+                    title="Delete Folder" 
+                  />
+                )}
+              </Menu>
+            )}
+          </Appbar.Header>
+        )}
 
         <View style={styles.headerStats}>
           <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>Folder Total Balance</Text>
@@ -146,7 +206,9 @@ export default function FolderDetailsScreen() {
               <CustomerCard 
                 customer={item} 
                 index={index} 
-                onPress={() => router.push(`/customers/${item.id}`)} 
+                onPress={() => handleCustomerPress(item.id)} 
+                onLongPress={() => handleCustomerLongPress(item.id)}
+                selected={selectedCustomers.includes(item.id)}
               />
             )}
             keyExtractor={(item: any) => item.id}

@@ -96,6 +96,7 @@ model Business {
   activityLogs ActivityLog[]
   editHistory  EditHistory[]
   reminders    Reminder[]
+  invitations  Invitation[]
   settings     BusinessSettings?
 }
 
@@ -429,6 +430,28 @@ model EditHistory {
   @@index([businessId])
   @@index([recordId])
 }
+
+model Invitation {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  email      String?
+  phone      String?
+  role       Role     @default(STAFF)
+  status     String   @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED
+  token      String   @unique
+
+  // Sync
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  version    Int      @default(1)
+
+  @@index([businessId])
+  @@index([email])
+  @@index([phone])
+}
+
 
 // -----------------------------------------
 // SYSTEM MODELS

@@ -249,16 +249,27 @@ export default function AIChat() {
         borderTopColor: theme.colors.outlineVariant,
         paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 24)
       }]}>
-        <TextInput
-          mode="outlined"
-          placeholder="Ask Leo about your business..."
-          value={input}
-          onChangeText={setInput}
-          style={styles.input}
-          multiline
-          maxLength={500}
-          right={<TextInput.Icon icon="send" disabled={!input.trim() || isLoading} onPress={() => handleSendPrompt(input)} />}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput
+            mode="outlined"
+            placeholder="Ask Leo about your business..."
+            value={input}
+            onChangeText={setInput}
+            style={[styles.input, { flex: 1 }]}
+            multiline
+            maxLength={500}
+          />
+          <IconButton 
+            icon="send" 
+            mode="contained"
+            containerColor={theme.colors.primary}
+            iconColor={theme.colors.onPrimary}
+            size={24}
+            disabled={!input.trim() || isLoading} 
+            onPress={() => handleSendPrompt(input)}
+            style={{ marginLeft: 8, marginTop: 8 }}
+          />
+        </View>
       </Surface>
     </KeyboardAvoidingView>
   );

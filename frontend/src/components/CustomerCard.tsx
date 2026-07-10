@@ -9,20 +9,27 @@ import { Image } from 'expo-image';
 interface Props {
   customer: Customer;
   onPress: () => void;
+  onLongPress?: () => void;
+  selected?: boolean;
   index: number;
 }
 
-const CustomerCardComponent = ({ customer, onPress, index }: Props) => {
+const CustomerCardComponent = ({ customer, onPress, onLongPress, selected, index }: Props) => {
   const theme = useTheme();
 
   return (
     <Animated.View entering={FadeInUp.delay(index * 50)}>
-      <Card style={styles.card} onPress={onPress} mode="elevated">
+      <Card 
+        style={[styles.card, selected && { backgroundColor: theme.colors.primaryContainer, borderWidth: 2, borderColor: theme.colors.primary }]} 
+        onPress={onPress} 
+        onLongPress={onLongPress}
+        mode={selected ? "contained" : "elevated"}
+      >
         <Card.Title
           title={customer.name}
-          titleStyle={{ color: theme.colors.onSurface }}
+          titleStyle={{ color: selected ? theme.colors.onPrimaryContainer : theme.colors.onSurface }}
           subtitle={customer.phone || 'No Phone Number'}
-          subtitleStyle={{ color: theme.colors.onSurfaceVariant }}
+          subtitleStyle={{ color: selected ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
           left={(props) => (
             customer.avatarUrl ? (
               <Image 

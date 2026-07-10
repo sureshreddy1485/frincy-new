@@ -4,6 +4,7 @@ import { Text, useTheme, Appbar, List, Surface, IconButton, Portal, Dialog, Butt
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { folderMemberService } from '../../../src/services/folderMember.service';
 import { useBusinessStore } from '../../../src/store/businessStore';
+import { useAuthStore } from '../../../src/store/authStore';
 import { CustomAlert } from '../../../src/providers/AlertProvider';
 
 
@@ -11,7 +12,8 @@ export default function FolderMembersScreen() {
   const { id } = useLocalSearchParams();
   const theme = useTheme();
   const router = useRouter();
-  const { activeBusinessId } = useBusinessStore();
+  const { activeBusinessId, activeBusinessRole } = useBusinessStore();
+  const { user } = useAuthStore();
 
   const [members, setMembers] = useState<any[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -77,29 +79,42 @@ export default function FolderMembersScreen() {
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Folder Members" />
-        <Appbar.Action icon="account-plus" onPress={() => setInviteOpen(true)} />
+        {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+          <Appbar.Action icon="account-plus" onPress={() => setInviteOpen(true)} />
+        )}
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.content}>
         <Surface style={styles.surface} elevation={1}>
-          {members.map((m, i) => (
-            <List.Item
-              key={m.id}
-              title={m.userId}
-              description={`Role: ${m.role}`}
-              left={props => <List.Icon {...props} icon="account" />}
-              right={props => (
-                <IconButton 
-                  {...props} 
-                  icon="delete" 
-                  size={20} 
-                  iconColor={theme.colors.error} 
-                  onPress={() => handleRemoveMember(m.id)} 
-                />
-              )}
-              style={i < members.length - 1 ? styles.divider : undefined}
-            />
-          ))}
+          {members.map((m, i) => {
+            const isMe = m.userId === user?.id;
+            const isUUID = m.userId.length === 36 && m.userId.includes('-');
+            const fallbackName = isUUID ? 'Team Member' : m.userId;
+            const displayName = isMe 
+              ? (user?.name || user?.email || user?.phone || fallbackName)
+              : ((m as any).user?.name || (m as any).user?.email || (m as any).user?.phone || fallbackName);
+
+            return (
+              <List.Item
+                key={m.id}
+                title={displayName}
+                description={isMe ? `Role: ${m.role} (You)` : `Role: ${m.role}`}
+                left={props => <List.Icon {...props} icon="account" />}
+                right={props => (
+                  activeBusinessRole === 'OWNER' ? (
+                    <IconButton 
+                      {...props} 
+                      icon="delete" 
+                      size={20} 
+                      iconColor={theme.colors.error} 
+                      onPress={() => handleRemoveMember(m.id)} 
+                    />
+                  ) : null
+                )}
+                style={i < members.length - 1 ? styles.divider : undefined}
+              />
+            )
+          })}
           {members.length === 0 && <List.Item title="No members shared with this folder." />}
         </Surface>
       </ScrollView>
@@ -111,10 +126,10 @@ export default function FolderMembersScreen() {
             <Text style={{ marginBottom: 16 }}>Grant user access to this specific folder.</Text>
             <TextInput
               label="Email or Phone Number"
-              mode="outlined"
+              mode="flat"
               value={userIdInput}
               onChangeText={setUserIdInput}
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: 16, backgroundColor: 'transparent' }}
             />
             
             <View style={{ flexDirection: 'row', gap: 8 }}>

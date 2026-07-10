@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TextInput, Button, Text, useTheme, Portal, Dialog, HelperText } from 'react-native-paper';
+import { TextInput, Button, Text, useTheme, Portal, Dialog, HelperText, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { apiClient } from '../../src/api/client';
 
@@ -22,6 +22,20 @@ export default function RegisterScreen() {
   const [dialogVisible, setDialogVisible] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
   const [dialogTitle, setDialogTitle] = useState('');
+
+  const togglePasswordRules = React.useCallback(() => setShowPasswordRules(p => !p), []);
+  const togglePassword = React.useCallback(() => setShowPassword(p => !p), []);
+  
+  const passwordIcon = React.useMemo(() => (
+    <TextInput.Icon
+      icon={() => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', width: 72, marginLeft: -32 }}>
+          <IconButton icon="information-outline" size={24} onPress={togglePasswordRules} style={{ margin: 0 }} />
+          <IconButton icon={showPassword ? "eye-off" : "eye"} size={24} onPress={togglePassword} style={{ margin: 0 }} />
+        </View>
+      )}
+    />
+  ), [showPassword, togglePasswordRules, togglePassword]);
 
   const showError = (title: string, message: string) => {
     setDialogTitle(title);
@@ -94,8 +108,7 @@ export default function RegisterScreen() {
         secureTextEntry={!showPassword}
         mode="flat"
         theme={{ colors: { background: theme.colors.background, surface: theme.colors.background } }}
-        left={<TextInput.Icon icon="information-outline" onPress={() => setShowPasswordRules(!showPasswordRules)} />}
-        right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
+        right={passwordIcon}
         style={[styles.input, { backgroundColor: 'transparent', marginBottom: showPasswordRules ? 0 : 16 }]}
       />
       {showPasswordRules && (

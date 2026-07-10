@@ -71,6 +71,7 @@ export default function CreateBusinessScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
+        <Appbar.Action icon="close" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} />
         <Appbar.Content title="Create Business" />
       </Appbar.Header>
 

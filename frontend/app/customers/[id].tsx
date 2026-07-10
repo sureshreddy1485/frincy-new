@@ -25,11 +25,12 @@ export default function CustomerDetailsScreen() {
   const { id } = useLocalSearchParams();
   const theme = useTheme();
   const router = useRouter();
-  const { activeBusinessRole } = useBusinessStore();
+  const { activeBusinessId, activeBusinessRole } = useBusinessStore();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [runningBalance, setRunningBalance] = useState(0);
   const [fabOpen, setFabOpen] = useState(false);
   const [upcomingReminder, setUpcomingReminder] = useState<any>(null);
@@ -88,13 +89,54 @@ export default function CustomerDetailsScreen() {
         text: 'Delete', 
         style: 'destructive',
         onPress: async () => {
-          if (!customer) return;
+          if (!customer || !activeBusinessId) return;
           try {
-            await customerService.delete(customer.id);
-            if (ledger) await ledgerRepository.delete(ledger.id);
+            await customerService.deleteCustomer(activeBusinessId, customer.id);
             router.back();
-          } catch (e) {
-            console.error(e);
+          } catch (e: any) {
+            CustomAlert.alert('Error', e.message || 'Failed to delete customer');
+          }
+        }
+      }
+    ]);
+  };
+
+  const toggleSelection = (transactionId: string) => {
+    setSelectedTransactions(prev => 
+      prev.includes(transactionId) ? prev.filter(id => id !== transactionId) : [...prev, transactionId]
+    );
+  };
+
+  const handleTransactionPress = (transaction: Transaction) => {
+    if (selectedTransactions.length > 0) {
+      toggleSelection(transaction.id);
+    } else {
+      router.push(`/transactions/${transaction.id}?ledgerId=${ledger?.id}`);
+    }
+  };
+
+  const handleTransactionLongPress = (transaction: Transaction) => {
+    if (activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') {
+      toggleSelection(transaction.id);
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    CustomAlert.alert('Delete Transactions', `Are you sure you want to delete ${selectedTransactions.length} transactions?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Delete', 
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await Promise.all(selectedTransactions.map(id => transactionService.deleteTransaction(id)));
+            setTransactions(prev => prev.filter(t => !selectedTransactions.includes(t.id)));
+            setSelectedTransactions([]);
+            // Reload running balance
+            const balance = await transactionService.getRunningBalance(ledger!.businessId, customer!.groupId || '', ledger!.id);
+            setRunningBalance(balance);
+          } catch (e: any) {
+            CustomAlert.alert('Error', e.message || 'Failed to delete transactions');
           }
         }
       }
@@ -116,30 +158,38 @@ export default function CustomerDetailsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-          <Appbar.BackAction onPress={() => router.back()} />
-          <Appbar.Content title={customer.name} />
-          
-          {/* Export available to OWNER and MANAGER */}
-          {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
-            <Appbar.Action icon="file-pdf-box" onPress={handleExportPDF} color={theme.colors.primary} />
-          )}
+        {selectedTransactions.length > 0 ? (
+          <Appbar.Header style={{ backgroundColor: theme.colors.primaryContainer }}>
+            <Appbar.Action icon="close" iconColor={theme.colors.onPrimaryContainer} onPress={() => setSelectedTransactions([])} />
+            <Appbar.Content title={`${selectedTransactions.length} selected`} titleStyle={{ color: theme.colors.onPrimaryContainer }} />
+            <Appbar.Action icon="delete" iconColor={theme.colors.onPrimaryContainer} onPress={handleDeleteSelected} />
+          </Appbar.Header>
+        ) : (
+          <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
+            <Appbar.BackAction onPress={() => router.back()} />
+            <Appbar.Content title={customer.name} subtitle={customer.updatedBy ? `Updated by ${customer.updatedBy}` : undefined} />
+            
+            {/* Export available to OWNER and MANAGER */}
+            {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+              <Appbar.Action icon="file-pdf-box" onPress={handleExportPDF} color={theme.colors.primary} />
+            )}
 
-          {/* Reminder available to OWNER and MANAGER */}
-          {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
-            <Appbar.Action icon="bell-plus" onPress={() => router.push(`/customers/reminder?customerId=${customer.id}`)} />
-          )}
-          
-          {/* Edit available to OWNER, MANAGER, WORKER */}
-          {activeBusinessRole !== 'VIEWER' && (
-            <Appbar.Action icon="pencil" onPress={() => router.push(`/customers/edit?id=${customer.id}`)} />
-          )}
+            {/* Reminder available to OWNER and MANAGER */}
+            {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+              <Appbar.Action icon="bell-plus" onPress={() => router.push(`/customers/reminder?customerId=${customer.id}`)} />
+            )}
+            
+            {/* Edit available to OWNER, MANAGER, WORKER */}
+            {activeBusinessRole !== 'VIEWER' && (
+              <Appbar.Action icon="pencil" onPress={() => router.push(`/customers/edit?id=${customer.id}`)} />
+            )}
 
-          {/* Delete available to OWNER only */}
-          {activeBusinessRole === 'OWNER' && (
-            <Appbar.Action icon="delete" color={theme.colors.error} onPress={handleDelete} />
-          )}
-        </Appbar.Header>
+            {/* Delete available to OWNER and MANAGER */}
+            {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+              <Appbar.Action icon="delete" color={theme.colors.error} onPress={handleDelete} />
+            )}
+          </Appbar.Header>
+        )}
 
         <Surface style={[styles.headerSurface, { backgroundColor: theme.colors.primaryContainer }]} elevation={2}>
           {customer.avatarUrl ? (
@@ -232,7 +282,9 @@ export default function CustomerDetailsScreen() {
               <TransactionCard 
                 transaction={item} 
                 index={index} 
-                onPress={() => router.push(`/transactions/${item.id}?ledgerId=${ledger?.id}`)} 
+                onPress={() => handleTransactionPress(item)} 
+                onLongPress={() => handleTransactionLongPress(item)}
+                selected={selectedTransactions.includes(item.id)}
               />
             )}
             keyExtractor={(item: any) => item.id}

@@ -50,7 +50,11 @@ export default function RecoveryCodeScreen() {
         router.replace('/auth/login');
       }
     } else {
-      router.replace('/auth/login');
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)');
+      }
     }
   };
 

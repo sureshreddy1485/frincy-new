@@ -27,6 +27,7 @@ interface PullResult {
   folder_invites: SyncChangeset;
   activity_logs: SyncChangeset;
   edit_history: SyncChangeset;
+  invitations: SyncChangeset;
 }
 
 interface PushChanges {
@@ -46,6 +47,7 @@ interface PushChanges {
   folder_invites?: SyncChangeset;
   activity_logs?: SyncChangeset;
   edit_history?: SyncChangeset;
+  invitations?: SyncChangeset;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -200,6 +202,18 @@ export class SyncRepository {
       where: { businessId: { in: businessIds }, updatedAt: { gt: since } },
     });
 
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const invitationRecords = await prisma.invitation.findMany({
+      where: {
+        OR: [
+          { businessId: { in: businessIds } }, // Invites created by this user
+          { email: user?.email ? { equals: user.email, mode: 'insensitive' } : undefined }, // Invites sent to this user
+          { phone: user?.phone ? { endsWith: user.phone.slice(-10) } : undefined }
+        ].filter(Boolean) as any,
+        updatedAt: { gt: since }
+      },
+    });
+
     return {
       businesses: bucket(bizRecords, since),
       business_members: bucket(memberRecords, since),
@@ -218,6 +232,7 @@ export class SyncRepository {
       folder_invites: bucket(folderInviteRecords, since),
       activity_logs: bucket(activityLogRecords, since),
       edit_history: bucket(editHistoryRecords, since),
+      invitations: bucket(invitationRecords, since),
     };
   }
 
@@ -241,6 +256,7 @@ export class SyncRepository {
       folder_invites: empty(),
       activity_logs: empty(),
       edit_history: empty(),
+      invitations: empty(),
     };
   }
 
@@ -387,6 +403,7 @@ export class SyncRepository {
       await apply(tx.folderInvite, changes.folder_invites);
       await apply(tx.activityLog, changes.activity_logs, biz);
       await apply(tx.editHistory, changes.edit_history, biz);
+      await apply(tx.invitation, changes.invitations, biz);
     });
 
     return { uploaded, conflicts };

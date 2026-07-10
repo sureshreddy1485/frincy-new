@@ -110,6 +110,14 @@ class CustomerService extends BaseService<CustomerRepository, NewCustomer, Custo
     if (!customer) throw new Error('Customer not found');
 
     await permissionService.assertFolderAccess(businessId, customer.groupId, 'DELETE_CUSTOMER');
+    
+    // Find and delete the associated ledger
+    const allLedgers = await ledgerRepository.getActiveLedgers(businessId, customer.groupId || '');
+    const custLedger = allLedgers.find(l => l.customerId === id);
+    if (custLedger) {
+      await ledgerRepository.delete(custLedger.id);
+    }
+    
     await this.repository.delete(id);
   }
 

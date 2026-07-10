@@ -21,7 +21,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { useBusinessStore } from '../../src/store/businessStore';
 import { useAuthStore } from '../../src/store/authStore';
-import { useDashboard, formatCompactCurrency, fc } from '../../src/dashboard/useDashboard';
+import { useDashboard, formatCompactCurrency } from '../../src/dashboard/useDashboard';
 import { useNotifications } from '../../src/notifications/useNotifications';
 import { KpiCard } from '../../src/dashboard/components/KpiCard';
 import { CashFlowChart } from '../../src/dashboard/components/CashFlowChart';

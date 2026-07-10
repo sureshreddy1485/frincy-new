@@ -4,7 +4,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { useAuthStore } from '../store/authStore';
 
 // Using Business-level roles for Version 1. Folder sharing is deferred.
-export type BusinessRole = 'OWNER' | 'MANAGER' | 'WORKER' | 'VIEWER';
+export type BusinessRole = 'OWNER' | 'MANAGER' | 'WORKER' | 'VIEWER' | 'STAFF';
 
 export interface BusinessPermissionData {
   canView: boolean;
@@ -70,8 +70,10 @@ export class PermissionService {
         return { canView: true, canCreate: true, canEdit: true, canDelete: true, canExport: true, canManageMembers: true };
       case 'MANAGER':
         return { canView: true, canCreate: true, canEdit: true, canDelete: false, canExport: true, canManageMembers: false };
+      case 'STAFF':
       case 'WORKER':
-        return { canView: true, canCreate: false, canEdit: true, canDelete: false, canExport: false, canManageMembers: false };
+        return {
+          canView: true, canCreate: true, canEdit: true, canDelete: false, canExport: false, canManageMembers: false };
       case 'VIEWER':
       default:
         return { canView: true, canCreate: false, canEdit: false, canDelete: false, canExport: false, canManageMembers: false };

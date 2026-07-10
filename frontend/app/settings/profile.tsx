@@ -117,12 +117,12 @@ export default function ProfileScreen() {
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>Customers</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.statBox, { backgroundColor: theme.colors.surface }]} onPress={() => router.push('/(tabs)/')}>
+          <TouchableOpacity style={[styles.statBox, { backgroundColor: theme.colors.surface }]} onPress={() => router.push('/')}>
             <Text variant="headlineMedium" style={{ color: theme.colors.primary }}>{stats.transactions}</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>Transactions</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.statBox, { backgroundColor: theme.colors.surface }]} onPress={() => router.push('/(tabs)/')}>
+          <TouchableOpacity style={[styles.statBox, { backgroundColor: theme.colors.surface }]} onPress={() => router.push('/')}>
             <Text variant="headlineMedium" style={{ color: theme.colors.primary }}>{stats.products + stats.invoices}</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>Items</Text>
           </TouchableOpacity>

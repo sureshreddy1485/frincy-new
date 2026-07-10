@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { BaseService } from './base.service';
 import { businessMemberRepository } from '../repository/businessMembers.repository';
 import { invitationRepository } from '../repository/invitation.repository';
@@ -17,13 +18,13 @@ class BusinessMemberService extends BaseService<typeof businessMemberRepository,
   }
 
   async inviteUser(businessId: string, payload: { email?: string; phone?: string; role: string }) {
-    // Insert directly into business_members using email/phone as a temporary userId for offline purposes
-    const tempUserId = payload.email || payload.phone || 'Unknown';
-    
-    return businessMemberRepository.create({
+    return invitationRepository.create({
       businessId,
-      userId: tempUserId,
-      role: payload.role
+      email: payload.email,
+      phone: payload.phone,
+      role: payload.role,
+      token: Crypto.randomUUID(),
+      status: 'PENDING'
     });
   }
 
@@ -37,6 +38,19 @@ class BusinessMemberService extends BaseService<typeof businessMemberRepository,
 
   async removeMember(memberId: string) {
     return businessMemberRepository.delete(memberId);
+  }
+
+  async acceptInvitation(invitation: Invitation, userId: string) {
+    await invitationRepository.update(invitation.id, { status: 'ACCEPTED' });
+    return businessMemberRepository.create({
+      businessId: invitation.businessId,
+      userId: userId,
+      role: invitation.role
+    });
+  }
+
+  async declineInvitation(invitationId: string) {
+    return invitationRepository.update(invitationId, { status: 'DECLINED' });
   }
 }
 

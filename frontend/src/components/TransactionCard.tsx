@@ -8,10 +8,12 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 interface Props {
   transaction: Transaction;
   onPress: () => void;
+  onLongPress?: () => void;
+  selected?: boolean;
   index: number;
 }
 
-const TransactionCardComponent = ({ transaction, onPress, index }: Props) => {
+const TransactionCardComponent = ({ transaction, onPress, onLongPress, selected, index }: Props) => {
   const theme = useTheme();
   
   const isPositive = transaction.type === 'INCOME' || transaction.type === 'GOT';
@@ -20,7 +22,12 @@ const TransactionCardComponent = ({ transaction, onPress, index }: Props) => {
 
   return (
     <Animated.View entering={FadeInUp.delay(index * 50)}>
-      <Card style={styles.card} onPress={onPress} mode="contained">
+      <Card 
+        style={[styles.card, selected && { backgroundColor: theme.colors.secondaryContainer, borderWidth: 2, borderColor: theme.colors.secondary }]} 
+        onPress={onPress} 
+        onLongPress={onLongPress}
+        mode={selected ? "contained" : "contained"}
+      >
         <Card.Title
           title={transaction.type}
           subtitle={transaction.note || new Date(transaction.date * 1000).toLocaleDateString()}

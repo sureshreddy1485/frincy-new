@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { database } from '../database';
 import { businesses, businessMembers } from '../database/schema';
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, desc, or } from 'drizzle-orm';
 import { Business } from '../database/models';
 import { BusinessRole } from '../services/permission.service';
 import { useAuthStore } from './authStore';
@@ -16,9 +16,10 @@ interface BusinessState {
   setActiveBusiness: (id: string) => Promise<void>;
   loadBusinesses: (userId: string) => Promise<Business[]>;
   clearBusinessData: () => Promise<void>;
+  refreshRole: () => Promise<void>;
 }
 
-export const useBusinessStore = create<BusinessState>((set) => ({
+export const useBusinessStore = create<BusinessState>((set, get) => ({
   activeBusinessId: null,
   activeBusinessRole: null,
   businessesList: [],
@@ -41,6 +42,7 @@ export const useBusinessStore = create<BusinessState>((set) => ({
             sql`${businessMembers.deletedAt} IS NULL`
           )
         )
+        .orderBy(desc(businessMembers.createdAt))
         .limit(1);
       if (result.length > 0) role = result[0].role as BusinessRole;
     }
@@ -51,6 +53,18 @@ export const useBusinessStore = create<BusinessState>((set) => ({
   loadBusinesses: async (userId: string) => {
     set({ isLoading: true });
     try {
+      const userState = useAuthStore.getState().user;
+      
+      // Resolve any pending offline invitations (email/phone to UUID mapping)
+      if (userState) {
+        const conditions = [];
+        if (userState.email) conditions.push(eq(businessMembers.userId, userState.email));
+        if (userState.phone) conditions.push(eq(businessMembers.userId, userState.phone));
+        if (conditions.length > 0) {
+          await database.update(businessMembers).set({ userId: userId }).where(or(...conditions));
+        }
+      }
+
       // Find all businesses where the user is a member
       const memberRecords = await database
         .select({ businessId: businessMembers.businessId })
@@ -115,6 +129,7 @@ export const useBusinessStore = create<BusinessState>((set) => ({
             sql`${businessMembers.deletedAt} IS NULL`
           )
         )
+        .orderBy(desc(businessMembers.createdAt))
         .limit(1);
       if (result.length > 0) role = result[0].role as BusinessRole;
 
@@ -131,5 +146,25 @@ export const useBusinessStore = create<BusinessState>((set) => ({
   clearBusinessData: async () => {
     await SecureStore.deleteItemAsync('active_business_id');
     set({ activeBusinessId: null, activeBusinessRole: null, businessesList: [], isLoading: false });
+  },
+
+  refreshRole: async () => {
+    const userId = useAuthStore.getState().user?.id;
+    const activeId = get().activeBusinessId;
+    if (userId && activeId) {
+      const result = await database
+        .select({ role: businessMembers.role })
+        .from(businessMembers)
+        .where(
+          and(
+            eq(businessMembers.businessId, activeId),
+            eq(businessMembers.userId, userId),
+            sql`${businessMembers.deletedAt} IS NULL`
+          )
+        )
+        .orderBy(desc(businessMembers.createdAt))
+        .limit(1);
+      if (result.length > 0) set({ activeBusinessRole: result[0].role as BusinessRole });
+    }
   }
 }));

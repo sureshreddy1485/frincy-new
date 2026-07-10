@@ -97,8 +97,8 @@ export default function EditTransactionScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Edit Transaction" />
-        {activeBusinessRole === 'OWNER' && (
+        <Appbar.Content title="Edit Transaction" subtitle={transaction?.updatedBy ? `Updated by ${transaction.updatedBy}` : undefined} />
+        {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
           <Appbar.Action icon="delete" onPress={handleDelete} color={theme.colors.error} />
         )}
       </Appbar.Header>

@@ -58,9 +58,8 @@ export default function GlobalSearch() {
             onChangeText={setQuery}
             autoFocus
             style={styles.searchInput}
-            left={<TextInput.Icon icon="magnify" />}
-            right={query ? <TextInput.Icon icon="close" onPress={() => setQuery('')} /> : null}
           />
+          {query ? <IconButton icon="close" onPress={() => setQuery('')} /> : <View style={{ width: 48 }} />}
         </View>
       </Surface>
 

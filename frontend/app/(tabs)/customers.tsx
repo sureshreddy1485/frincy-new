@@ -16,11 +16,19 @@ export default function CustomersScreen() {
   const { activeBusinessId, activeBusinessRole } = useBusinessStore();
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [groups, setGroups] = useState<CustomerGroup[]>([]);
   
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const { CustomAlert } = require('../../src/providers/AlertProvider');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useFocusEffect(
     useCallback(() => {
@@ -35,7 +43,7 @@ export default function CustomersScreen() {
         await Promise.all(
           groupData.map(async (g) => {
             try {
-              const custs = await customerService.getActiveCustomers(activeBusinessId, g.id, searchQuery);
+              const custs = await customerService.getActiveCustomers(activeBusinessId, g.id, debouncedQuery);
               allCustomers = [...allCustomers, ...custs];
             } catch (e) {
               // Ignore errors for folders they might not have access to if any slip through
@@ -51,7 +59,7 @@ export default function CustomersScreen() {
       };
       load();
       return () => { isMounted = false; };
-    }, [searchQuery, activeBusinessId])
+    }, [debouncedQuery, activeBusinessId])
   );
 
   const handleCreateFolder = async () => {
@@ -70,6 +78,48 @@ export default function CustomersScreen() {
     }
   };
 
+  const toggleSelection = (groupId: string) => {
+    setSelectedGroups(prev => 
+      prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]
+    );
+  };
+
+  const handleGroupPress = (groupId: string) => {
+    if (selectedGroups.length > 0) {
+      if (groupId === 'uncategorized') return; // Cannot select uncategorized
+      toggleSelection(groupId);
+    } else {
+      router.push(`/folders/${groupId}`);
+    }
+  };
+
+  const handleGroupLongPress = (groupId: string) => {
+    if (groupId === 'uncategorized') return;
+    if (activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') {
+      toggleSelection(groupId);
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    CustomAlert.alert('Delete Folders', `Are you sure you want to delete ${selectedGroups.length} folders? Customers inside will NOT be deleted, but moved to Uncategorized.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Delete', 
+        style: 'destructive',
+        onPress: async () => {
+          if (!activeBusinessId) return;
+          try {
+            await Promise.all(selectedGroups.map(id => customerGroupService.deleteGroup(activeBusinessId, id)));
+            setGroups(prev => prev.filter(g => !selectedGroups.includes(g.id)));
+            setSelectedGroups([]);
+          } catch (e: any) {
+            CustomAlert.alert('Error', e.message || 'Failed to delete folders');
+          }
+        }
+      }
+    ]);
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
       {!activeBusinessId ? (
@@ -80,21 +130,29 @@ export default function CustomersScreen() {
         </View>
       ) : (
         <>
-          <View style={styles.headerRow}>
-            <Searchbar
-              placeholder="Search customers or folders"
-              onChangeText={setSearchQuery}
-              value={searchQuery}
-              style={[styles.searchBar, { backgroundColor: theme.colors.elevation.level2 }]}
-            />
-            {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
-              <IconButton 
-                icon="folder-plus" 
-                mode="contained-tonal"
-                onPress={() => setCreateDialogVisible(true)}
+          {selectedGroups.length > 0 ? (
+            <View style={[styles.headerRow, { backgroundColor: theme.colors.primaryContainer, paddingVertical: 8 }]}>
+              <IconButton icon="close" iconColor={theme.colors.onPrimaryContainer} onPress={() => setSelectedGroups([])} />
+              <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, flex: 1 }}>{selectedGroups.length} selected</Text>
+              <IconButton icon="delete" iconColor={theme.colors.onPrimaryContainer} onPress={handleDeleteSelected} />
+            </View>
+          ) : (
+            <View style={styles.headerRow}>
+              <Searchbar
+                placeholder="Search customers or folders"
+                onChangeText={setSearchQuery}
+                value={searchQuery}
+                style={[styles.searchBar, { backgroundColor: theme.colors.elevation.level2 }]}
               />
-            )}
-      </View>
+              {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
+                <IconButton 
+                  icon="folder-plus" 
+                  mode="contained-tonal"
+                  onPress={() => setCreateDialogVisible(true)}
+                />
+              )}
+            </View>
+          )}
 
       {groups.length === 0 && !searchQuery ? (
         <View style={styles.emptyContainer}>
@@ -122,8 +180,12 @@ export default function CustomersScreen() {
                     </Text>
                   </View>
                 )}
-                onPress={() => router.push(`/folders/${group.id}`)}
-                style={{ backgroundColor: theme.colors.surface, marginHorizontal: 16, marginVertical: 4, borderRadius: 8 }}
+                onPress={() => handleGroupPress(group.id)}
+                onLongPress={() => handleGroupLongPress(group.id)}
+                style={[
+                  { backgroundColor: theme.colors.surface, marginHorizontal: 16, marginVertical: 4, borderRadius: 8 },
+                  selectedGroups.includes(group.id) && { backgroundColor: theme.colors.primaryContainer, borderWidth: 2, borderColor: theme.colors.primary }
+                ]}
               />
             );
           })}
