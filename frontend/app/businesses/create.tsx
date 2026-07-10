@@ -9,6 +9,9 @@ import { database } from '../../src/database';
 import { businesses, businessMembers } from '../../src/database/schema';
 import { useAuthStore } from '../../src/store/authStore';
 import { useBusinessStore } from '../../src/store/businessStore';
+import { businessRepository } from '../../src/repository/business.repository';
+import { businessMemberRepository } from '../../src/repository/businessMembers.repository';
+import { SyncService } from '../../src/sync/sync.service';
 
 function generateId(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -39,27 +42,23 @@ export default function CreateBusinessScreen() {
   const onSubmit = async (data: BusinessFormValues) => {
     if (!user) return;
     try {
-      const businessId = generateId();
-      
-      await database.insert(businesses).values({
-        id: businessId,
+      const business = await businessRepository.create({
         name: data.name.trim(),
         currency: data.currency.toUpperCase(),
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        logoUrl: null,
       });
       
-      await database.insert(businessMembers).values({
-        id: generateId(),
-        businessId: businessId,
+      await businessMemberRepository.create({
+        businessId: business.id,
         userId: user.id,
         role: 'OWNER',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
       });
 
       await loadBusinesses(user.id);
-      await setActiveBusiness(businessId);
+      await setActiveBusiness(business.id);
+      
+      // Trigger sync in background to upload the new business immediately
+      SyncService.runSync().catch(console.error);
 
       router.replace('/(tabs)');
     } catch (error) {
