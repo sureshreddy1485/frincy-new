@@ -8,6 +8,9 @@ import { logger } from './config/logger.config';
 
 const app: Application = express();
 
+// Trust Render's reverse proxy so express-rate-limit can read real client IPs
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet());
 app.use(cors({

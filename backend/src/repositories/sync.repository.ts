@@ -298,12 +298,14 @@ export class SyncRepository {
     changes: PushChanges,
     _lastPulledAt: number,
   ): Promise<{ uploaded: number; conflicts: number }> {
-    const businessIds = await this.getBusinessIdsForUser(userId);
     const syncTime = new Date();
     let uploaded = 0;
     let conflicts = 0;
 
     await prisma.$transaction(async (tx) => {
+      // Build an apply helper that captures businessIds by reference so we can refresh it
+      let businessIds = await this.getBusinessIdsForUser(userId);
+
       const apply = async (
         modelDelegate: any,
         data: SyncChangeset | undefined,
@@ -334,6 +336,10 @@ export class SyncRepository {
 
         // ── Updates (Last Write Wins) ─────────────────────────────────────────
         for (const record of data.updated ?? []) {
+          if (!record.id) {
+            logger.warn(`[Sync Push] Skipping update with missing id`);
+            continue;
+          }
           const biz = getBusinessId?.(record);
           if (biz && !businessIds.includes(biz)) continue;
 
@@ -379,6 +385,7 @@ export class SyncRepository {
 
         // ── Deletes (soft) ────────────────────────────────────────────────────
         for (const id of data.deleted ?? []) {
+          if (!id) continue;
           try {
             const existing = await modelDelegate.findUnique({ where: { id } });
             if (!existing) continue;
@@ -418,8 +425,20 @@ export class SyncRepository {
         return record;
       };
 
-      await apply(tx.business, changes.businesses, (r) => r.id); // business IS the root
+      // ── Step 1: Apply businesses first (no ownership check needed — user is creating their own) ──
+      await apply(tx.business, changes.businesses, (r) => r.id);
+
+      // ── Step 2: Apply business members ──────────────────────────────────────
       await apply(tx.businessMember, changes.business_members, biz, resolveMemberUser);
+
+      // ── Step 3: REFRESH businessIds — now includes any just-created memberships ──
+      const freshMemberships = await tx.businessMember.findMany({
+        where: { userId, deletedAt: null },
+        select: { businessId: true },
+      });
+      businessIds = freshMemberships.map((m: any) => m.businessId);
+
+      // ── Step 4: Apply the rest using the updated ownership list ─────────────
       await apply(tx.customerGroup, changes.customer_groups, biz);
       await apply(tx.customer, changes.customers, biz);
       await apply(tx.ledger, changes.ledgers, biz);
@@ -429,7 +448,7 @@ export class SyncRepository {
       await apply(tx.transactionTag, changes.transaction_tags);
       await apply(tx.attachment, changes.attachments);
       await apply(tx.reminder, changes.reminders, biz);
-      await apply(tx.folderMember, changes.folder_members, undefined, resolveMemberUser); // group relies on FK
+      await apply(tx.folderMember, changes.folder_members, undefined, resolveMemberUser);
       await apply(tx.folderPermission, changes.folder_permissions);
       await apply(tx.folderInvite, changes.folder_invites);
       await apply(tx.activityLog, changes.activity_logs, biz);
