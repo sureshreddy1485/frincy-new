@@ -207,8 +207,8 @@ export class SyncRepository {
       where: {
         OR: [
           { businessId: { in: businessIds } }, // Invites created by this user
-          { email: user?.email ? { equals: user.email, mode: 'insensitive' } : undefined }, // Invites sent to this user
-          { phone: user?.phone ? { endsWith: user.phone.slice(-10) } : undefined }
+          user?.email ? { email: { equals: user.email, mode: 'insensitive' } } : undefined, // Invites sent to this user
+          user?.phone ? { phone: { endsWith: user.phone.slice(-10) } } : undefined
         ].filter(Boolean) as any,
         updatedAt: { gt: since }
       },
