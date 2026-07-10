@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput as RNTextInput, Keyboard, RefreshControl } from 'react-native';
-import { Appbar, List, Switch, useTheme, Divider, Avatar, Text, Surface, IconButton, Dialog, Portal, TextInput, Button, Searchbar } from 'react-native-paper';
+import { Appbar, List, Switch, useTheme, Divider, Avatar, Text, Surface, IconButton, Dialog, Portal, TextInput, Button, Searchbar, ActivityIndicator } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAppStore } from '../../src/store';
 import { useAuthStore } from '../../src/store/authStore';
 import { useSyncStore } from '../../src/store/syncStore';
 import { useBusinessStore } from '../../src/store/businessStore';
 import { database } from '../../src/database';
-import { customers, ledgers, products, invoices } from '../../src/database/schema';
+import { customers, ledgers, products, invoices, syncQueue } from '../../src/database/schema';
 import { eq, sql } from 'drizzle-orm';
 import * as ImagePicker from 'expo-image-picker';
 import { CustomAlert } from '../../src/providers/AlertProvider';
@@ -38,20 +38,31 @@ export default function SettingsScreen() {
     }, [user])
   );
 
-  const onRefresh = useCallback(async () => {
+  const resetAndSync = useCallback(async () => {
     setRefreshing(true);
     try {
+      // Reset all stuck/failed sync queue items — clears retry backoff so they get re-pushed
+      await database.update(syncQueue).set({
+        retryCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+      });
+
+      // Run a full sync — push all pending local changes, then pull everything
       await SyncService.runSync({ forceFullSync: true });
+
       if (user) {
         const invites = await invitationRepository.getPendingForUser(user.email ?? null, user.phone ?? null);
         setPendingInvitations(invites);
       }
     } catch (error) {
-      console.error('Failed to refresh settings data', error);
+      console.error('Failed to reset and sync', error);
     } finally {
       setRefreshing(false);
     }
   }, [user]);
+
+  const onRefresh = resetAndSync;
 
   const handleAcceptInvite = async (invitation: Invitation) => {
     if (!user) return;
@@ -315,6 +326,15 @@ export default function SettingsScreen() {
                 description={`${syncStatus} · Last: ${lastSync}`}
                 left={(p) => <List.Icon {...p} icon="cloud-sync" />}
                 onPress={() => (router as any).push('/settings/sync')}
+              />
+            )}
+            {showItem('Force Sync', 'Reset and re-upload all pending data') && (
+              <List.Item
+                title="Force Sync"
+                description="Reset stuck items and re-upload all pending data"
+                left={(p) => <List.Icon {...p} icon="cloud-upload" color={theme.colors.primary} />}
+                right={(p) => refreshing ? <ActivityIndicator {...p} size="small" /> : null}
+                onPress={resetAndSync}
               />
             )}
             {showItem('Export Data', 'Export all your business data') && (
