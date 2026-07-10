@@ -35,6 +35,22 @@ export class DownloadProcessor {
     return timestamp;
   }
 
+  /**
+   * Convert any ISO date strings in a server record to Unix millisecond timestamps,
+   * so they match the SQLite INTEGER columns used locally.
+   */
+  private static normalizeRecord(record: any): any {
+    const dateFields = ['createdAt', 'updatedAt', 'deletedAt', 'dueDate', 'date', 'expiresAt'];
+    const normalized = { ...record };
+    for (const field of dateFields) {
+      if (normalized[field] && typeof normalized[field] === 'string') {
+        const ms = new Date(normalized[field]).getTime();
+        normalized[field] = isNaN(ms) ? null : ms;
+      }
+    }
+    return normalized;
+  }
+
   private static async applyChanges(changes: SyncChanges): Promise<void> {
     await database.transaction(async (tx) => {
       const tableNames = Object.keys(changes);
@@ -56,8 +72,8 @@ export class DownloadProcessor {
         // 2. Handle CREATED records
         if (tableChanges.created && tableChanges.created.length > 0) {
           for (const serverRecord of tableChanges.created) {
-            // Ensure syncStatus is SYNCED
-            const recordToInsert = { ...serverRecord, syncStatus: 1 };
+            // Ensure syncStatus is SYNCED and dates are normalized
+            const recordToInsert = { ...this.normalizeRecord(serverRecord), syncStatus: 1 };
             
             // Check if exists locally
             const existing = await tx.select().from(tableDef).where(eq(tableDef.id, serverRecord.id));
@@ -74,7 +90,7 @@ export class DownloadProcessor {
         // 3. Handle UPDATED records
         if (tableChanges.updated && tableChanges.updated.length > 0) {
           for (const serverRecord of tableChanges.updated) {
-            const recordToUpdate = { ...serverRecord, syncStatus: 1 };
+            const recordToUpdate = { ...this.normalizeRecord(serverRecord), syncStatus: 1 };
 
             const existing = await tx.select().from(tableDef).where(eq(tableDef.id, serverRecord.id));
             if (existing.length === 0) {

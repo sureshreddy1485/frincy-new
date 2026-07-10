@@ -110,8 +110,51 @@ export class SyncRepository {
         ? [businessId]
         : allBusinessIds;
 
+    // ── ALWAYS fetch invitations for this user, even if they have no businesses yet ──
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const invitationOrConditions: any[] = [];
+    if (businessIds.length > 0) {
+      invitationOrConditions.push({ businessId: { in: businessIds } }); // Invites they own/created
+    }
+    if (user?.email) {
+      invitationOrConditions.push({ email: { equals: user.email, mode: 'insensitive' } });
+    }
+    if (user?.phone) {
+      invitationOrConditions.push({ phone: { endsWith: user.phone.slice(-10) } });
+    }
+
+    const invitationRecords = invitationOrConditions.length > 0
+      ? await prisma.invitation.findMany({
+          where: {
+            OR: invitationOrConditions,
+            updatedAt: { gt: since },
+          },
+        })
+      : [];
+
+    // If user has no businesses, return only invitations (nothing else to sync)
     if (businessIds.length === 0) {
-      return this.emptyPullResult();
+      const empty = (): SyncChangeset => ({ created: [], updated: [], deleted: [] });
+      return {
+        businesses: empty(),
+        business_members: empty(),
+        customer_groups: empty(),
+        customers: empty(),
+        ledgers: empty(),
+        categories: empty(),
+        tags: empty(),
+        transactions: empty(),
+        transaction_tags: empty(),
+        attachments: empty(),
+        reminders: empty(),
+        notifications: empty(),
+        folder_members: empty(),
+        folder_permissions: empty(),
+        folder_invites: empty(),
+        activity_logs: empty(),
+        edit_history: empty(),
+        invitations: bucket(invitationRecords, since),
+      };
     }
 
     const sinceFilter = { updatedAt: { gt: since } };
@@ -200,18 +243,6 @@ export class SyncRepository {
     // ── Edit History ───────────────────────────────────────────────────────────
     const editHistoryRecords = await prisma.editHistory.findMany({
       where: { businessId: { in: businessIds }, updatedAt: { gt: since } },
-    });
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const invitationRecords = await prisma.invitation.findMany({
-      where: {
-        OR: [
-          { businessId: { in: businessIds } }, // Invites created by this user
-          user?.email ? { email: { equals: user.email, mode: 'insensitive' } } : undefined, // Invites sent to this user
-          user?.phone ? { phone: { endsWith: user.phone.slice(-10) } } : undefined
-        ].filter(Boolean) as any,
-        updatedAt: { gt: since }
-      },
     });
 
     return {
