@@ -12,9 +12,10 @@ interface Props {
   onLongPress?: () => void;
   selected?: boolean;
   index: number;
+  updaterName?: string;
 }
 
-const CustomerCardComponent = ({ customer, onPress, onLongPress, selected, index }: Props) => {
+const CustomerCardComponent = ({ customer, onPress, onLongPress, selected, index, updaterName }: Props) => {
   const theme = useTheme();
 
   return (
@@ -28,7 +29,7 @@ const CustomerCardComponent = ({ customer, onPress, onLongPress, selected, index
         <Card.Title
           title={customer.name}
           titleStyle={{ color: selected ? theme.colors.onPrimaryContainer : theme.colors.onSurface }}
-          subtitle={customer.phone || 'No Phone Number'}
+          subtitle={updaterName ? `By ${updaterName} • ${customer.phone || 'No Phone Number'}` : (customer.phone || 'No Phone Number')}
           subtitleStyle={{ color: selected ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
           left={(props) => (
             customer.avatarUrl ? (

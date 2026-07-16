@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, InteractionManager } from 'react-native';
 import { Text, useTheme, Searchbar, FAB, List, Dialog, Portal, TextInput, Button, IconButton } from 'react-native-paper';
 import { customerService } from '../../src/services/customer.service';
 import { customerGroupService } from '../../src/services/customerGroup.service';
@@ -57,8 +57,15 @@ export default function CustomersScreen() {
           setGroups(groupData.sort((a, b) => a.name.localeCompare(b.name)));
         }
       };
-      load();
-      return () => { isMounted = false; };
+      
+      const task = InteractionManager.runAfterInteractions(() => {
+        load();
+      });
+      
+      return () => { 
+        isMounted = false; 
+        task.cancel();
+      };
     }, [debouncedQuery, activeBusinessId])
   );
 
@@ -207,7 +214,8 @@ export default function CustomersScreen() {
           <Dialog.Content>
             <TextInput
               label="Folder Name"
-              mode="outlined"
+              mode="flat"
+              style={{ backgroundColor: 'transparent' }}
               value={newFolderName}
               onChangeText={setNewFolderName}
               autoFocus

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { InteractionManager } from 'react-native';
 import { dashboardService, DateRange, DateFilter, getDateFilter } from '../services/dashboard.service';
 import { customerService } from '../services/customer.service';
 import type {
@@ -90,7 +91,10 @@ export function useDashboard(businessId: string | null) {
   }, [businessId, dateRange, customFilter]);
 
   useEffect(() => {
-    load();
+    const task = InteractionManager.runAfterInteractions(() => {
+      load();
+    });
+    return () => task.cancel();
   }, [load]);
 
   return {

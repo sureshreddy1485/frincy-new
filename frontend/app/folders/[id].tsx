@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
 import { Text, useTheme, Appbar, FAB } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
@@ -10,6 +10,9 @@ import { customerGroupRepository } from '../../src/repository/customerGroup.repo
 import { Customer, CustomerGroup } from '../../src/database/models';
 import { CustomerCard } from '../../src/components/CustomerCard';
 import { useBusinessStore } from '../../src/store/businessStore';
+import { database } from '../../src/database';
+import { users } from '../../src/database/schema';
+import { inArray } from 'drizzle-orm';
 import { CustomAlert } from '../../src/providers/AlertProvider';
 
 
@@ -27,6 +30,7 @@ export default function FolderDetailsScreen() {
   const [editDialogVisible, setEditDialogVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -44,19 +48,38 @@ export default function FolderDetailsScreen() {
 
         // Load customers
         if (isMounted) {
+          let fetchedCusts: Customer[] = [];
           if (id === 'uncategorized') {
             const defaultGroup = await customerGroupRepository.getOrCreateUncategorized(activeBusinessId);
-            const allCusts = await customerService.getActiveCustomers(activeBusinessId, defaultGroup.id);
-            setCustomers(allCusts);
+            fetchedCusts = await customerService.getActiveCustomers(activeBusinessId, defaultGroup.id);
           } else {
-            const allCusts = await customerService.getActiveCustomers(activeBusinessId, id as string);
-            setCustomers(allCusts);
+            fetchedCusts = await customerService.getActiveCustomers(activeBusinessId, id as string);
+          }
+          setCustomers(fetchedCusts);
+
+          // Fetch user names for updatedBy
+          const userIds = new Set<string>();
+          if (group && group.updatedBy) userIds.add(group.updatedBy);
+          fetchedCusts.forEach(c => { if (c.updatedBy) userIds.add(c.updatedBy); });
+          
+          if (userIds.size > 0) {
+            const usersData = await database.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, Array.from(userIds)));
+            const map: Record<string, string> = {};
+            usersData.forEach(u => {
+              map[u.id] = u.name || u.email || 'Unknown User';
+            });
+            setUserMap(map);
           }
         }
       };
-      load();
-      return () => { isMounted = false; };
-    }, [id, activeBusinessId])
+      const task = InteractionManager.runAfterInteractions(() => {
+        load();
+      });
+      return () => { 
+        isMounted = false; 
+        task.cancel();
+      };
+    }, [id, activeBusinessId, group?.updatedBy])
   );
 
   if (!activeBusinessId) return null;
@@ -145,7 +168,7 @@ export default function FolderDetailsScreen() {
         ) : (
           <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
             <Appbar.BackAction onPress={() => router.back()} />
-            <Appbar.Content title={group ? group.name : 'Folder'} subtitle={group?.updatedBy ? `Updated by ${group.updatedBy}` : undefined} />
+            <Appbar.Content title={group ? group.name : 'Folder'} subtitle={group?.updatedBy && userMap[group.updatedBy] ? `Updated by ${userMap[group.updatedBy]}` : undefined} />
             {id !== 'uncategorized' && (
               <Menu
                 visible={menuVisible}
@@ -209,6 +232,7 @@ export default function FolderDetailsScreen() {
                 onPress={() => handleCustomerPress(item.id)} 
                 onLongPress={() => handleCustomerLongPress(item.id)}
                 selected={selectedCustomers.includes(item.id)}
+                updaterName={item.updatedBy ? userMap[item.updatedBy] : undefined}
               />
             )}
             keyExtractor={(item: any) => item.id}
@@ -230,7 +254,8 @@ export default function FolderDetailsScreen() {
             <Dialog.Content>
               <TextInput
                 label="Folder Name"
-                mode="outlined"
+                mode="flat"
+                style={{ backgroundColor: 'transparent' }}
                 value={renameValue}
                 onChangeText={setRenameValue}
                 autoFocus

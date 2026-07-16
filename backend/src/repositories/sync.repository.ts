@@ -102,19 +102,48 @@ export class SyncRepository {
 
   async pullChanges(userId: string, lastPulledAt: number, businessId?: string): Promise<PullResult> {
     const since = new Date(lastPulledAt);
-    const allBusinessIds = await this.getBusinessIdsForUser(userId);
 
-    // If businessId provided, restrict to only that business (after access check)
-    const businessIds =
-      businessId && allBusinessIds.includes(businessId)
-        ? [businessId]
-        : allBusinessIds;
+    // 1. Full Business Access
+    const fullMemberships = await prisma.businessMember.findMany({
+      where: { userId, deletedAt: null },
+      select: { businessId: true },
+    });
+    let fullBusinessIds = fullMemberships.map((m) => m.businessId);
+
+    // 2. Folder-Level Access
+    const folderMemberships = await prisma.folderMember.findMany({
+      where: { userId, deletedAt: null },
+      select: { groupId: true, group: { select: { businessId: true } } },
+    });
+    let folderGroupIds = folderMemberships.map((m) => m.groupId);
+    let folderBusinessIds = folderMemberships.map((m) => m.group.businessId);
+
+    // Apply specific businessId filter if provided
+    if (businessId) {
+      if (fullBusinessIds.includes(businessId)) {
+        fullBusinessIds = [businessId];
+        folderGroupIds = [];
+        folderBusinessIds = [];
+      } else if (folderBusinessIds.includes(businessId)) {
+        fullBusinessIds = [];
+        folderBusinessIds = [businessId];
+        folderGroupIds = folderMemberships
+          .filter(m => m.group.businessId === businessId)
+          .map(m => m.groupId);
+      } else {
+        fullBusinessIds = [];
+        folderBusinessIds = [];
+        folderGroupIds = [];
+      }
+    }
+
+    const allBusinessIds = Array.from(new Set([...fullBusinessIds, ...folderBusinessIds]));
 
     // ── ALWAYS fetch invitations for this user, even if they have no businesses yet ──
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const invitationOrConditions: any[] = [];
-    if (businessIds.length > 0) {
-      invitationOrConditions.push({ businessId: { in: businessIds } }); // Invites they own/created
+    if (allBusinessIds.length > 0) {
+      invitationOrConditions.push({ businessId: { in: allBusinessIds } }); // Invites they own/created
     }
     if (user?.email) {
       invitationOrConditions.push({ email: { equals: user.email, mode: 'insensitive' } });
@@ -132,8 +161,7 @@ export class SyncRepository {
         })
       : [];
 
-    // If user has no businesses, return only invitations (nothing else to sync)
-    if (businessIds.length === 0) {
+    if (allBusinessIds.length === 0) {
       const empty = (): SyncChangeset => ({ created: [], updated: [], deleted: [] });
       return {
         businesses: empty(),
@@ -158,91 +186,112 @@ export class SyncRepository {
     }
 
     const sinceFilter = { updatedAt: { gt: since } };
-    const bizFilter = { businessId: { in: businessIds } };
+    
+    // For records where full access gets everything in business, and folder access gets specific groups
+    const groupAccessFilter = {
+      OR: [
+        { businessId: { in: fullBusinessIds } },
+        { id: { in: folderGroupIds } }
+      ]
+    };
+
+    const customerAccessFilter = {
+      OR: [
+        { businessId: { in: fullBusinessIds } },
+        { groupId: { in: folderGroupIds } },
+        { groupId: null, businessId: { in: fullBusinessIds } } // unassigned customers only for full members
+      ]
+    };
+
+    const ledgerAccessFilter = {
+      OR: [
+        { businessId: { in: fullBusinessIds } },
+        { customer: { groupId: { in: folderGroupIds } } }
+      ]
+    };
+
+    const transactionAccessFilter = {
+      OR: [
+        { ledger: { businessId: { in: fullBusinessIds } } },
+        { ledger: { customer: { groupId: { in: folderGroupIds } } } }
+      ]
+    };
 
     // ── Businesses ─────────────────────────────────────────────────────────────
     const bizRecords = await prisma.business.findMany({
-      where: { id: { in: businessIds }, updatedAt: { gt: since } },
+      where: { id: { in: allBusinessIds }, updatedAt: { gt: since } },
     });
 
     // ── Members ────────────────────────────────────────────────────────────────
     const memberRecords = await prisma.businessMember.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { businessId: { in: allBusinessIds }, ...sinceFilter },
     });
 
     // ── Customer Groups ────────────────────────────────────────────────────────
     const groupRecords = await prisma.customerGroup.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { ...groupAccessFilter, ...sinceFilter },
     });
 
     // ── Customers ──────────────────────────────────────────────────────────────
     const customerRecords = await prisma.customer.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { ...customerAccessFilter, ...sinceFilter },
     });
 
     // ── Ledgers ────────────────────────────────────────────────────────────────
     const ledgerRecords = await prisma.ledger.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { ...ledgerAccessFilter, ...sinceFilter },
     });
 
-    // ── Categories ─────────────────────────────────────────────────────────────
+    // ── Categories & Tags (Shared at business level) ──────────────────────────
     const categoryRecords = await prisma.category.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { businessId: { in: allBusinessIds }, ...sinceFilter },
     });
-
-    // ── Tags ───────────────────────────────────────────────────────────────────
     const tagRecords = await prisma.tag.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { businessId: { in: allBusinessIds }, ...sinceFilter },
     });
 
-    // ── Transactions (no direct businessId — join through ledger) ───────────────
+    // ── Transactions ───────────────────────────────────────────────────────────
     const txRecords = await prisma.transaction.findMany({
-      where: { ledger: { businessId: { in: businessIds } }, updatedAt: { gt: since } },
+      where: { ...transactionAccessFilter, ...sinceFilter },
     });
 
     // ── Transaction Tags ────────────────────────────────────────────────────────
     const txTagRecords = await prisma.transactionTag.findMany({
-      where: { transaction: { ledger: { businessId: { in: businessIds } } }, updatedAt: { gt: since } },
+      where: { transaction: transactionAccessFilter, ...sinceFilter },
     });
 
     // ── Attachments ─────────────────────────────────────────────────────────────
     const attachmentRecords = await prisma.attachment.findMany({
-      where: { transaction: { ledger: { businessId: { in: businessIds } } }, updatedAt: { gt: since } },
+      where: { transaction: transactionAccessFilter, ...sinceFilter },
     });
 
     // ── Reminders ──────────────────────────────────────────────────────────────
     const reminderRecords = await prisma.reminder.findMany({
-      where: { ...bizFilter, ...sinceFilter },
+      where: { businessId: { in: allBusinessIds }, ...sinceFilter },
     });
 
-    // ── Notifications (user-scoped, not business-scoped) ───────────────────────
+    // ── Notifications (user-scoped) ─────────────────────────────────────────────
     const notificationRecords = await prisma.notification.findMany({
-      where: { userId, updatedAt: { gt: since } },
+      where: { userId, ...sinceFilter },
     });
 
-    // ── Folder Members ─────────────────────────────────────────────────────────
+    // ── Folder Members, Permissions, Invites ───────────────────────────────────
     const folderMemberRecords = await prisma.folderMember.findMany({
-      where: { group: { businessId: { in: businessIds } }, updatedAt: { gt: since } },
+      where: { group: groupAccessFilter, ...sinceFilter },
     });
-
-    // ── Folder Permissions ─────────────────────────────────────────────────────
     const folderPermissionRecords = await prisma.folderPermission.findMany({
-      where: { member: { group: { businessId: { in: businessIds } } }, updatedAt: { gt: since } },
+      where: { member: { group: groupAccessFilter }, ...sinceFilter },
     });
-
-    // ── Folder Invites ─────────────────────────────────────────────────────────
     const folderInviteRecords = await prisma.folderInvite.findMany({
-      where: { group: { businessId: { in: businessIds } }, updatedAt: { gt: since } },
+      where: { group: groupAccessFilter, ...sinceFilter },
     });
 
-    // ── Activity Logs ──────────────────────────────────────────────────────────
+    // ── Activity Logs & Edit History ───────────────────────────────────────────
     const activityLogRecords = await prisma.activityLog.findMany({
-      where: { businessId: { in: businessIds }, updatedAt: { gt: since } },
+      where: { businessId: { in: allBusinessIds }, ...sinceFilter },
     });
-
-    // ── Edit History ───────────────────────────────────────────────────────────
     const editHistoryRecords = await prisma.editHistory.findMany({
-      where: { businessId: { in: businessIds }, updatedAt: { gt: since } },
+      where: { businessId: { in: allBusinessIds }, ...sinceFilter },
     });
 
     return {
@@ -500,10 +549,10 @@ export class SyncRepository {
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  /** Strip any client-supplied fields that should never be trusted */
+  /** Strip any client-supplied fields that should never be trusted or are not in the Prisma schema */
   private sanitize(record: any): any {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _status, _changed, ...safe } = record;
+    const { _status, _changed, syncStatus, deviceId, serverId, updatedBy, ...safe } = record;
     return safe;
   }
 }

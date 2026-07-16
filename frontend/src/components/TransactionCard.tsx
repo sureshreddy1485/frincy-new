@@ -11,9 +11,10 @@ interface Props {
   onLongPress?: () => void;
   selected?: boolean;
   index: number;
+  updaterName?: string;
 }
 
-const TransactionCardComponent = ({ transaction, onPress, onLongPress, selected, index }: Props) => {
+const TransactionCardComponent = ({ transaction, onPress, onLongPress, selected, index, updaterName }: Props) => {
   const theme = useTheme();
   
   const isPositive = transaction.type === 'INCOME' || transaction.type === 'GOT';
@@ -30,7 +31,7 @@ const TransactionCardComponent = ({ transaction, onPress, onLongPress, selected,
       >
         <Card.Title
           title={transaction.type}
-          subtitle={transaction.note || new Date(transaction.date * 1000).toLocaleDateString()}
+          subtitle={updaterName ? `By ${updaterName} • ${transaction.note || new Date(transaction.date * 1000).toLocaleDateString()}` : (transaction.note || new Date(transaction.date * 1000).toLocaleDateString())}
           left={(props) => (
             <Avatar.Icon 
               {...props} 

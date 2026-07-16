@@ -8,6 +8,9 @@ import { z } from 'zod';
 import { transactionService } from '../../src/services/transaction.service';
 import { Transaction } from '../../src/database/models';
 import { useBusinessStore } from '../../src/store/businessStore';
+import { database } from '../../src/database';
+import { users } from '../../src/database/schema';
+import { eq } from 'drizzle-orm';
 // @ts-ignore - Paper dates might lack some strict types
 import { DatePickerModal } from 'react-native-paper-dates';
 import { CustomAlert } from '../../src/providers/AlertProvider';
@@ -29,6 +32,7 @@ export default function EditTransactionScreen() {
   const [type, setType] = useState<string>('INCOME');
   const [date, setDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [updaterName, setUpdaterName] = useState<string | null>(null);
 
   const { control, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm({
     resolver: zodResolver(txSchema),
@@ -45,6 +49,11 @@ export default function EditTransactionScreen() {
           amount: record.amount.toString(),
           note: record.note || '',
         });
+        
+        if (record.updatedBy) {
+          const u = await database.select().from(users).where(eq(users.id, record.updatedBy)).limit(1);
+          if (u.length > 0) setUpdaterName(u[0].name || u[0].email);
+        }
       } catch (error) {
         CustomAlert.alert('Error', 'Transaction not found.');
         router.back();
@@ -97,7 +106,7 @@ export default function EditTransactionScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Edit Transaction" subtitle={transaction?.updatedBy ? `Updated by ${transaction.updatedBy}` : undefined} />
+        <Appbar.Content title="Edit Transaction" subtitle={updaterName ? `Updated by ${updaterName}` : undefined} />
         {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
           <Appbar.Action icon="delete" onPress={handleDelete} color={theme.colors.error} />
         )}

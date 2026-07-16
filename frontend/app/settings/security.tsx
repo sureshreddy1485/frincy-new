@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Appbar, List, useTheme, Switch, Text, Dialog, Portal, Button, TextInput } from 'react-native-paper';
+import { Appbar, List, useTheme, Switch, Text, Dialog, Portal, Button, TextInput, Banner } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { apiClient } from '../../src/api/client';
@@ -21,6 +21,13 @@ export default function SecuritySettingsScreen() {
 
   const [recoveryDialog, setRecoveryDialog] = useState(false);
   const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [hasRecoveryCode, setHasRecoveryCode] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    apiClient.get('/auth/recovery-code/status')
+      .then(res => setHasRecoveryCode(res.data.data.hasRecoveryCode))
+      .catch(() => setHasRecoveryCode(null));
+  }, []);
 
   const handleToggleRemember = async () => {
     const newVal = !isRememberMe;
@@ -66,6 +73,8 @@ export default function SecuritySettingsScreen() {
       });
       const { recoveryCode } = res.data.data;
       setRecoveryDialog(false);
+      setRecoveryPassword('');
+      setHasRecoveryCode(true); // update banner
       router.push({ pathname: '/auth/recovery', params: { recoveryCode } });
     } catch (e: any) {
       CustomAlert.alert('Error', e.response?.data?.message || 'Failed to generate code');
@@ -100,6 +109,21 @@ export default function SecuritySettingsScreen() {
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {hasRecoveryCode === false && (
+          <Banner
+            visible
+            icon="shield-alert"
+            actions={[
+              {
+                label: 'Generate Now',
+                onPress: () => setRecoveryDialog(true),
+              },
+            ]}
+            style={{ backgroundColor: '#FFF3CD', marginBottom: 8 }}
+          >
+            Your account has no recovery code. If you forget your password, you will be permanently locked out.
+          </Banner>
+        )}
         <List.Section>
           <List.Subheader>Authentication</List.Subheader>
           <List.Item

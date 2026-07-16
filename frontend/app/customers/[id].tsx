@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, InteractionManager } from 'react-native';
 import { Text, useTheme, Appbar, FAB, Surface, IconButton, Menu, Button } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
@@ -11,8 +11,8 @@ import { TransactionCard } from '../../src/components/TransactionCard';
 import { generateLedgerPDF } from '../../src/utils/pdfGenerator';
 import { Avatar } from 'react-native-paper';
 import { database } from '../../src/database';
-import { reminders } from '../../src/database/schema';
-import { eq, and } from 'drizzle-orm';
+import { reminders, users } from '../../src/database/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 import { Image } from 'expo-image';
 
 import { useBusinessStore } from '../../src/store/businessStore';
@@ -34,6 +34,7 @@ export default function CustomerDetailsScreen() {
   const [runningBalance, setRunningBalance] = useState(0);
   const [fabOpen, setFabOpen] = useState(false);
   const [upcomingReminder, setUpcomingReminder] = useState<any>(null);
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const loadCustomer = async () => {
@@ -74,12 +75,31 @@ export default function CustomerDetailsScreen() {
           setTransactions(data);
           setRunningBalance(balance);
           if (reminderRes.length > 0) setUpcomingReminder(reminderRes[0]);
+
+          // Fetch user names for updatedBy
+          const userIds = new Set<string>();
+          if (customer?.updatedBy) userIds.add(customer.updatedBy);
+          data.forEach(t => { if (t.updatedBy) userIds.add(t.updatedBy); });
+          
+          if (userIds.size > 0) {
+            const usersData = await database.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, Array.from(userIds)));
+            const map: Record<string, string> = {};
+            usersData.forEach(u => {
+              map[u.id] = u.name || u.email || 'Unknown User';
+            });
+            setUserMap(map);
+          }
         }
       };
 
-      loadData();
-      return () => { isMounted = false; };
-    }, [ledger])
+      const task = InteractionManager.runAfterInteractions(() => {
+        loadData();
+      });
+      return () => { 
+        isMounted = false; 
+        task.cancel();
+      };
+    }, [ledger, customer])
   );
 
   const handleDelete = () => {
@@ -167,7 +187,7 @@ export default function CustomerDetailsScreen() {
         ) : (
           <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
             <Appbar.BackAction onPress={() => router.back()} />
-            <Appbar.Content title={customer.name} subtitle={customer.updatedBy ? `Updated by ${customer.updatedBy}` : undefined} />
+            <Appbar.Content title={customer.name} subtitle={customer.updatedBy && userMap[customer.updatedBy] ? `Updated by ${userMap[customer.updatedBy]}` : undefined} />
             
             {/* Export available to OWNER and MANAGER */}
             {(activeBusinessRole === 'OWNER' || activeBusinessRole === 'MANAGER') && (
@@ -285,6 +305,7 @@ export default function CustomerDetailsScreen() {
                 onPress={() => handleTransactionPress(item)} 
                 onLongPress={() => handleTransactionLongPress(item)}
                 selected={selectedTransactions.includes(item.id)}
+                updaterName={item.updatedBy ? userMap[item.updatedBy] : undefined}
               />
             )}
             keyExtractor={(item: any) => item.id}
