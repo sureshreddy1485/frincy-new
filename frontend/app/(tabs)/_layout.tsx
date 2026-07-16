@@ -33,11 +33,17 @@ function CustomTabNavigator({
   }
 
   const isTapping = useRef(false);
+  const currentPageIndex = useRef(state.index);
 
   // Synchronize state index with pager view when navigation happens externally (e.g., deep links, back button)
   useEffect(() => {
-    if (!isTapping.current) {
-      pagerRef.current?.setPageWithoutAnimation(state.index);
+    if (currentPageIndex.current !== state.index) {
+      if (isTapping.current) {
+        pagerRef.current?.setPageWithoutAnimation(state.index);
+      } else {
+        pagerRef.current?.setPage(state.index);
+      }
+      currentPageIndex.current = state.index;
     }
     isTapping.current = false;
   }, [state.index]);
@@ -52,6 +58,7 @@ function CustomTabNavigator({
           onPageSelected={(e) => {
             const index = e.nativeEvent.position;
             if (index !== state.index) {
+              currentPageIndex.current = index;
               const route = state.routes[index];
               const event = navigation.emit({
                 type: 'tabPress',
@@ -108,6 +115,7 @@ function CustomTabNavigator({
 
                   if (!isFocused && !(event as any).defaultPrevented) {
                     isTapping.current = true;
+                    currentPageIndex.current = index;
                     navigation.navigate(route.name);
                     // Force instant jump as requested: "Tap any tab to jump instantly without showing intermediate tabs."
                     pagerRef.current?.setPageWithoutAnimation(index);

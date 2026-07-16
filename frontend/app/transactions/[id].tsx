@@ -11,8 +11,7 @@ import { useBusinessStore } from '../../src/store/businessStore';
 import { database } from '../../src/database';
 import { users } from '../../src/database/schema';
 import { eq } from 'drizzle-orm';
-// @ts-ignore - Paper dates might lack some strict types
-import { DatePickerModal } from 'react-native-paper-dates';
+import { CustomDatePicker } from '../../src/components/CustomDatePicker';
 import { CustomAlert } from '../../src/providers/AlertProvider';
 
 
@@ -33,6 +32,12 @@ export default function EditTransactionScreen() {
   const [date, setDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [updaterName, setUpdaterName] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsReady(true), 350);
+    return () => clearTimeout(t);
+  }, []);
 
   const { control, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm({
     resolver: zodResolver(txSchema),
@@ -102,6 +107,10 @@ export default function EditTransactionScreen() {
     );
   }
 
+  if (!isReady) {
+    return <View style={[styles.container, { backgroundColor: theme.colors.background }]} />;
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
@@ -152,15 +161,13 @@ export default function EditTransactionScreen() {
         >
           {date.toLocaleDateString()}
         </Button>
-        <DatePickerModal
-          locale="en"
-          mode="single"
+        <CustomDatePicker
           visible={datePickerOpen}
           onDismiss={() => setDatePickerOpen(false)}
           date={date}
-          onConfirm={(params: any) => {
+          onConfirm={(d: Date) => {
             setDatePickerOpen(false);
-            if (params.date) setDate(params.date);
+            setDate(d);
           }}
         />
 

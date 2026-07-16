@@ -5,8 +5,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useBusinessStore } from '../../src/store/businessStore';
 import { reminderRepository } from '../../src/repository/reminder.repository';
 import { NotificationScheduler } from '../../src/notifications/notificationScheduler';
-// @ts-ignore
-import { DatePickerModal, TimePickerModal } from 'react-native-paper-dates';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { CustomAlert } from '../../src/providers/AlertProvider';
 
 
@@ -96,36 +95,39 @@ export default function ReminderScreen() {
           </Button>
         </View>
 
-        <DatePickerModal
-          locale="en"
-          mode="single"
-          visible={datePickerVisible}
-          onDismiss={() => setDatePickerVisible(false)}
-          date={date}
-          onConfirm={(params: any) => {
-            setDatePickerVisible(false);
-            if (params.date) {
-              const newDate = new Date(params.date);
-              newDate.setHours(date.getHours());
-              newDate.setMinutes(date.getMinutes());
-              setDate(newDate);
-            }
-          }}
-        />
+        {datePickerVisible && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            display="default"
+            onChange={(event, selectedDate) => {
+              setDatePickerVisible(false);
+              if (selectedDate) {
+                const newDate = new Date(selectedDate);
+                newDate.setHours(date.getHours());
+                newDate.setMinutes(date.getMinutes());
+                setDate(newDate);
+              }
+            }}
+          />
+        )}
 
-        <TimePickerModal
-          visible={timePickerVisible}
-          onDismiss={() => setTimePickerVisible(false)}
-          onConfirm={(params: any) => {
-            setTimePickerVisible(false);
-            const newDate = new Date(date);
-            newDate.setHours(params.hours);
-            newDate.setMinutes(params.minutes);
-            setDate(newDate);
-          }}
-          hours={date.getHours()}
-          minutes={date.getMinutes()}
-        />
+        {timePickerVisible && (
+          <DateTimePicker
+            value={date}
+            mode="time"
+            display="default"
+            onChange={(event, selectedDate) => {
+              setTimePickerVisible(false);
+              if (selectedDate) {
+                const newDate = new Date(date);
+                newDate.setHours(selectedDate.getHours());
+                newDate.setMinutes(selectedDate.getMinutes());
+                setDate(newDate);
+              }
+            }}
+          />
+        )}
 
         <Button mode="contained" onPress={handleSave} style={{ marginTop: 32, paddingVertical: 6 }}>
           Schedule Reminder

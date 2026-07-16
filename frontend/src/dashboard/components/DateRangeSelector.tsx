@@ -4,8 +4,7 @@ import { Text, useTheme } from 'react-native-paper';
 import { DateRange, DateFilter } from '../../services/dashboard.service';
 
 import { IconButton } from 'react-native-paper';
-// @ts-ignore
-import { DatePickerModal } from 'react-native-paper-dates';
+import { CustomDateRangePicker } from '../../components/CustomDateRangePicker';
 
 interface Props {
   selected: DateRange;
@@ -74,17 +73,15 @@ export const DateRangeSelector = React.memo(({ selected, onSelect, onCustomFilte
         </Text>
       </TouchableOpacity>
 
-      <DatePickerModal
-        locale="en"
-        mode="range"
+      <CustomDateRangePicker
         visible={open}
         onDismiss={() => setOpen(false)}
         startDate={customFilter ? customFilter.from : undefined}
         endDate={customFilter ? customFilter.to : undefined}
-        onConfirm={(params: any) => {
+        onConfirm={({ startDate, endDate }) => {
           setOpen(false);
-          if (params.startDate && params.endDate && onCustomFilter) {
-            onCustomFilter({ from: params.startDate, to: params.endDate });
+          if (onCustomFilter) {
+            onCustomFilter({ from: startDate, to: endDate });
           }
         }}
       />

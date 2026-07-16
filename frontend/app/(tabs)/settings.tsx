@@ -26,6 +26,14 @@ export default function SettingsScreen() {
 
   const [pendingInvitations, setPendingInvitations] = useState<Invitation[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const task = setTimeout(() => {
+      setIsReady(true);
+    }, 0);
+    return () => clearTimeout(task);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -137,6 +145,10 @@ export default function SettingsScreen() {
     : 'Never';
 
   const activeBusiness = businessesList.find(b => b.id === activeBusinessId);
+
+  if (!isReady) {
+    return <View style={[styles.container, { backgroundColor: theme.colors.background }]} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -440,8 +452,9 @@ export default function SettingsScreen() {
 
       {/* Business Switcher Dialog */}
       <Portal>
-        <Dialog visible={isSwitcherVisible} onDismiss={() => setSwitcherVisible(false)}>
-          <Dialog.Title>Switch Workspace</Dialog.Title>
+        {isSwitcherVisible && (
+          <Dialog visible={isSwitcherVisible} onDismiss={() => setSwitcherVisible(false)}>
+            <Dialog.Title>Switch Workspace</Dialog.Title>
           <Dialog.ScrollArea style={{ paddingHorizontal: 0 }}>
             <ScrollView>
               {businessesList.map(b => (
@@ -479,8 +492,10 @@ export default function SettingsScreen() {
             <Button onPress={() => setSwitcherVisible(false)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
+        )}
         
         {/* Theme Selection Dialog */}
+        {themeDialogVisible && (
         <Dialog visible={themeDialogVisible} onDismiss={() => setThemeDialogVisible(false)}>
           <Dialog.Title>Select Theme</Dialog.Title>
           <Dialog.ScrollArea style={{ paddingHorizontal: 0 }}>
@@ -524,6 +539,7 @@ export default function SettingsScreen() {
             <Button onPress={() => setThemeDialogVisible(false)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
+        )}
       </Portal>
     </View>
   );

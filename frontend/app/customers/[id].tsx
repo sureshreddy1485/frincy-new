@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert, InteractionManager } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { Text, useTheme, Appbar, FAB, Surface, IconButton, Menu, Button } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
@@ -8,6 +8,7 @@ import { transactionService } from '../../src/services/transaction.service';
 import { ledgerRepository } from '../../src/repository/ledger.repository';
 import { Customer, Ledger, Transaction } from '../../src/database/models';
 import { TransactionCard } from '../../src/components/TransactionCard';
+import { AddTransactionDialog } from '../../src/components/AddTransactionDialog';
 import { generateLedgerPDF } from '../../src/utils/pdfGenerator';
 import { Avatar } from 'react-native-paper';
 import { database } from '../../src/database';
@@ -35,6 +36,44 @@ export default function CustomerDetailsScreen() {
   const [fabOpen, setFabOpen] = useState(false);
   const [upcomingReminder, setUpcomingReminder] = useState<any>(null);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
+  
+  const [addTxVisible, setAddTxVisible] = useState(false);
+  const [addTxType, setAddTxType] = useState<'INCOME' | 'EXPENSE'>('INCOME');
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsReady(true), 350);
+    return () => clearTimeout(t);
+  }, []);
+
+  const loadData = async () => {
+    if (!ledger || !activeBusinessId) return;
+    const data = await transactionService.getTransactions(ledger.businessId, customer!.groupId || '', ledger.id);
+    const balance = await transactionService.getRunningBalance(ledger.businessId, customer!.groupId || '', ledger.id);
+    
+    // Calculate Total Gave and Total Got
+    const reminderRes = await database.select().from(reminders)
+      .where(and(eq(reminders.relatedId, customer!.id), eq(reminders.status, 'PENDING')))
+      .limit(1);
+
+    setTransactions(data);
+    setRunningBalance(balance);
+    if (reminderRes.length > 0) setUpcomingReminder(reminderRes[0]);
+
+    // Fetch user names for updatedBy
+    const userIds = new Set<string>();
+    if (customer?.updatedBy) userIds.add(customer.updatedBy);
+    data.forEach(t => { if (t.updatedBy) userIds.add(t.updatedBy); });
+    
+    if (userIds.size > 0) {
+      const usersData = await database.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, Array.from(userIds)));
+      const map: Record<string, string> = {};
+      usersData.forEach(u => {
+        map[u.id] = u.name || u.email || 'Unknown User';
+      });
+      setUserMap(map);
+    }
+  };
 
   useEffect(() => {
     const loadCustomer = async () => {
@@ -62,42 +101,15 @@ export default function CustomerDetailsScreen() {
       let isMounted = true;
       if (!ledger) return;
 
-      const loadData = async () => {
-        const data = await transactionService.getTransactions(ledger.businessId, customer!.groupId || '', ledger.id);
-        const balance = await transactionService.getRunningBalance(ledger.businessId, customer!.groupId || '', ledger.id);
-        
-        // Calculate Total Gave and Total Got
-        const reminderRes = await database.select().from(reminders)
-          .where(and(eq(reminders.relatedId, customer!.id), eq(reminders.status, 'PENDING')))
-          .limit(1);
-
-        if (isMounted) {
-          setTransactions(data);
-          setRunningBalance(balance);
-          if (reminderRes.length > 0) setUpcomingReminder(reminderRes[0]);
-
-          // Fetch user names for updatedBy
-          const userIds = new Set<string>();
-          if (customer?.updatedBy) userIds.add(customer.updatedBy);
-          data.forEach(t => { if (t.updatedBy) userIds.add(t.updatedBy); });
-          
-          if (userIds.size > 0) {
-            const usersData = await database.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, Array.from(userIds)));
-            const map: Record<string, string> = {};
-            usersData.forEach(u => {
-              map[u.id] = u.name || u.email || 'Unknown User';
-            });
-            setUserMap(map);
-          }
-        }
-      };
-
-      const task = InteractionManager.runAfterInteractions(() => {
-        loadData();
-      });
+      const task = setTimeout(() => {
+        let isM = true;
+        loadData().then(() => {
+          if (!isM) return;
+        });
+        return () => { isM = false; }
+      }, 0);
       return () => { 
-        isMounted = false; 
-        task.cancel();
+        clearTimeout(task);
       };
     }, [ledger, customer])
   );
@@ -169,7 +181,13 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  if (!customer) return null;
+  if (!isReady || !customer) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+      </View>
+    );
+  }
 
   const totalGave = transactions.filter(t => ['EXPENSE', 'GAVE'].includes(t.type)).reduce((acc, t) => acc + t.amount, 0);
   const totalGot = transactions.filter(t => ['INCOME', 'GOT'].includes(t.type)).reduce((acc, t) => acc + t.amount, 0);
@@ -260,7 +278,7 @@ export default function CustomerDetailsScreen() {
               <Button 
                 mode="contained" 
                 icon="arrow-down-left" 
-                onPress={() => router.push(`/transactions/add?ledgerId=${ledger.id}&type=INCOME`)}
+                onPress={() => { setAddTxType('INCOME'); setAddTxVisible(true); }}
                 style={{ flex: 1, backgroundColor: theme.colors.primary }}
               >
                 Got
@@ -268,7 +286,7 @@ export default function CustomerDetailsScreen() {
               <Button 
                 mode="contained" 
                 icon="arrow-up-right" 
-                onPress={() => router.push(`/transactions/add?ledgerId=${ledger.id}&type=EXPENSE`)}
+                onPress={() => { setAddTxType('EXPENSE'); setAddTxVisible(true); }}
                 style={{ flex: 1, backgroundColor: theme.colors.error }}
               >
                 Gave
@@ -314,6 +332,18 @@ export default function CustomerDetailsScreen() {
           />
         )}
 
+        {ledger && activeBusinessId && (
+          <AddTransactionDialog
+            visible={addTxVisible}
+            onDismiss={() => setAddTxVisible(false)}
+            ledgerId={ledger.id}
+            initialType={addTxType}
+            activeBusinessId={activeBusinessId}
+            onSuccess={() => {
+              loadData(); // Refresh list on success
+            }}
+          />
+        )}
 
       </View>
     </>

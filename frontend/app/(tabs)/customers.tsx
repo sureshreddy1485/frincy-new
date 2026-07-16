@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, InteractionManager } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, useTheme, Searchbar, FAB, List, Dialog, Portal, TextInput, Button, IconButton } from 'react-native-paper';
 import { customerService } from '../../src/services/customer.service';
 import { customerGroupService } from '../../src/services/customerGroup.service';
@@ -58,13 +58,13 @@ export default function CustomersScreen() {
         }
       };
       
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = setTimeout(() => {
         load();
-      });
+      }, 0);
       
       return () => { 
         isMounted = false; 
-        task.cancel();
+        clearTimeout(task);
       };
     }, [debouncedQuery, activeBusinessId])
   );

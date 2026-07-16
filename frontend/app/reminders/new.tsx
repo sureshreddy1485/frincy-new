@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Appbar, useTheme, TextInput, Button, Text } from 'react-native-paper';
-import { DatePickerModal, TimePickerModal } from 'react-native-paper-dates';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useBusinessStore } from '../../src/store/businessStore';
 import { reminderRepository } from '../../src/repository/reminder.repository';
@@ -100,28 +100,31 @@ export default function NewReminderScreen() {
         </Button>
       </ScrollView>
 
-      <DatePickerModal
-        locale="en"
-        mode="single"
-        visible={datePickerVisible}
-        onDismiss={() => setDatePickerVisible(false)}
-        date={date}
-        onConfirm={(params) => {
-          setDatePickerVisible(false);
-          setDate(params.date as Date);
-        }}
-      />
+      {datePickerVisible && (
+        <DateTimePicker
+          value={date || new Date()}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setDatePickerVisible(false);
+            if (selectedDate) setDate(selectedDate);
+          }}
+        />
+      )}
       
-      <TimePickerModal
-        visible={timePickerVisible}
-        onDismiss={() => setTimePickerVisible(false)}
-        onConfirm={({ hours, minutes }) => {
-          setTimePickerVisible(false);
-          setTime({ hours, minutes });
-        }}
-        hours={time.hours}
-        minutes={time.minutes}
-      />
+      {timePickerVisible && (
+        <DateTimePicker
+          value={date || new Date()}
+          mode="time"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setTimePickerVisible(false);
+            if (selectedDate) {
+              setTime({ hours: selectedDate.getHours(), minutes: selectedDate.getMinutes() });
+            }
+          }}
+        />
+      )}
     </View>
   );
 }

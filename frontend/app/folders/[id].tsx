@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Alert, InteractionManager } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Text, useTheme, Appbar, FAB } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Menu, IconButton, Dialog, Portal, TextInput, Button } from 'react-native-paper';
 import { customerService } from '../../src/services/customer.service';
 import { customerGroupService } from '../../src/services/customerGroup.service';
@@ -23,6 +24,7 @@ export default function FolderDetailsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { activeBusinessId, activeBusinessRole } = useBusinessStore();
+  const insets = useSafeAreaInsets();
 
   const [group, setGroup] = useState<CustomerGroup | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -31,6 +33,12 @@ export default function FolderDetailsScreen() {
   const [renameValue, setRenameValue] = useState('');
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsReady(true), 350);
+    return () => clearTimeout(t);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,12 +80,12 @@ export default function FolderDetailsScreen() {
           }
         }
       };
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = setTimeout(() => {
         load();
-      });
+      }, 0);
       return () => { 
         isMounted = false; 
-        task.cancel();
+        clearTimeout(task);
       };
     }, [id, activeBusinessId, group?.updatedBy])
   );
@@ -154,6 +162,14 @@ export default function FolderDetailsScreen() {
       }
     ]);
   };
+
+  if (!isReady || !group) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+      </View>
+    );
+  }
 
   return (
     <>
@@ -243,7 +259,7 @@ export default function FolderDetailsScreen() {
 
         <FAB
           icon="account-plus"
-          style={styles.fab}
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 16) }]}
           color={theme.colors.onPrimary}
           onPress={() => router.push(`/customers/add?groupId=${id === 'uncategorized' ? '' : id}`)}
         />
@@ -286,7 +302,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     margin: 16,
     right: 0,
-    bottom: 0,
     backgroundColor: '#6750A4', // primary color fallback if dynamic not passed to style directly
   }
 });
